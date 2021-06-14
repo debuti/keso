@@ -160,8 +160,10 @@ impl Peripheral {
         unsafe {
             let cmd_sequence = [0, 0, 1, *vt, *sp, *entry];
 
-            //bool enabled = irq_is_enabled(SIO_IRQ_PROC0);
-            //irq_set_enabled(SIO_IRQ_PROC0, false);
+            let mut cm0p = super::cm0p::Peripheral::new();
+
+            let enabled = cm0p.irq_is_enabled(super::SIO_IRQ_PROC0);
+            cm0p.irq_set_enabled(super::SIO_IRQ_PROC0, false);
         
             let mut seq = 0;
             loop {
@@ -179,7 +181,7 @@ impl Peripheral {
                 if seq < cmd_sequence.len() {break;}
             }
         
-            //irq_set_enabled(SIO_IRQ_PROC0, enabled);
+            cm0p.irq_set_enabled(super::SIO_IRQ_PROC0, enabled);
         }
     }
 }
