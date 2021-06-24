@@ -48,12 +48,15 @@ pub static __RESET: unsafe extern "C" fn() -> ! = PreResetTrampoline;
 #[cfg(armv6m)]
 pub fn reset_handler() -> ! {
     extern "C" {
-        // These symbols come from `linker.ld`
+        // These symbols come from `memory.ld`
         static mut __sbss: u32; // Start of .bss section
         static mut __ebss: u32; // End of .bss section
         static mut __sdata: u32; // Start of .data section
         static mut __edata: u32; // End of .data section
         static __sidata: u32; // Start of .rodata section
+        static mut _vector_table_0: u32; // Start of vector table core0
+        static mut _vector_table_1: u32; // Start of vector table core1    
+        static _vector_table_size: u32; // Vector table sizes        
     }
 
     // Initialize (Zero) BSS
@@ -77,6 +80,19 @@ pub fn reset_handler() -> ! {
             write_volatile(sdata, read(sidata));
             sdata = sdata.offset(1);
             sidata = sidata.offset(1);
+        }
+    }
+
+    // Setup vector table for core 1
+    unsafe {
+        let mut ptr0: *mut u32 = &mut _vector_table_0;
+        let end: *mut u32 = &mut _vector_table_1;
+        let mut ptr1: *mut u32 = &mut _vector_table_1;
+
+        while ptr0 < end {
+            ptr0 = ptr0.offset(1);
+            ptr1 = ptr1.offset(1);
+            write_volatile(ptr1, read(ptr0));
         }
     }
 

@@ -12,5 +12,6 @@ focus cmd
 #  q:  quit
 #  x/x <addr>: view memory
 #  set *(0x20020000 as *mut i32) = 0x0000CAFE: set memory address
-#  j *0xd0d0d0d0: Jump to address and continue execution
+#  j *0xd0d0d0d0: jump to address and continue execution
+#  set $r1=10: set register
  

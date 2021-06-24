@@ -36,13 +36,13 @@ clean:
 debug:
 	$(OPENOCD) >/dev/null 2>&1 & echo "$$!" > openocd.pid
 	sleep 1
-	-arm-none-eabi-gdb --command=debug.gdb $(target)
+	-arm-none-eabi-gdb --command=res/debug.gdb $(target)
 	kill -9 `cat openocd.pid` && rm openocd.pid
 
 .PHONY: debugrunning
 debugrunning:
 	# Remember doing: openocd -f interface/picoprobe.cfg -f target/rp2040.cfg -s tcl
-	arm-none-eabi-gdb -command=debugrunning.gdb $(target)
+	arm-none-eabi-gdb -command=res/debugrunning.gdb $(target)
 	# Then do break whatever and j *0x20041f02 
 
 flash: cargo

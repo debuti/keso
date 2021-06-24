@@ -1,4 +1,3 @@
-/* Specify the memory areas */
 MEMORY
 {
     BOOT_LOADER(rx): ORIGIN = 0x10000000, LENGTH = 0x100
@@ -8,12 +7,12 @@ MEMORY
     STACK1(rwx)    : ORIGIN = 0x20041000, LENGTH = 4k
 }
 
-EXTERN(__RESET_VECTOR);
+/*EXTERN(__RESET_VECTOR);*/
 
-/* # Sections */
 SECTIONS
 {
-  PROVIDE(_stack_start = ORIGIN(STACK0) + LENGTH(STACK0));
+  PROVIDE(_stack0_start = ORIGIN(STACK0) + LENGTH(STACK0));
+  PROVIDE(_stack1_start = ORIGIN(STACK1) + LENGTH(STACK1));
 
   /* ## Sections in FLASH */
   /* ### Boot loader */
@@ -28,12 +27,12 @@ SECTIONS
 
 
   /* ## Sections in RAM */
-  /* ### Vector table */
-  .vector_table :
+  /* ### Vector table for core 0 */
+  .vector_table_0 :
   {
-    LONG(_stack_start);                /* Initial Stack Pointer */
+    LONG(_stack0_start);                /* Initial Stack Pointer */
     KEEP(*(.vector_table.resetv));     /* Reset vector */
-    __reset_vector = .;
+    __assert_reset_vector_0 = .;
     KEEP(*(.vector_table.nmi));
     KEEP(*(.vector_table.hard_fault));
     KEEP(*(.vector_table.mem_manage));
@@ -41,14 +40,29 @@ SECTIONS
     KEEP(*(.vector_table.usage_fault));
 
     /* Placeholder for other unused interrupts in the vector table. */
-    . = ADDR(.vector_table) + (48*4);
+    . = ADDR(.vector_table_0) + (48*4);
   } > RAM AT > FLASH
 
-  ASSERT(__reset_vector == ADDR(.vector_table) + 0x8,
-         "ERROR: the reset vector is missing")
+  ASSERT(__assert_reset_vector_0 == ADDR(.vector_table_0) + 0x8,
+         "ERROR: the reset vector 0 is missing")
+
+  PROVIDE(_vector_table_0 = ADDR(.vector_table_0));
+  PROVIDE(_reset_0 = ADDR(.vector_table_0) + 0x4);
+
+  /* ### Vector table for core 1 */
+  .vector_table_1 :
+  {
+    LONG(_stack1_start);          
+
+    /* Vector table for core 1 will be populated by core 0 before launching it */
+    . = ADDR(.vector_table_1) + (48*4);
+  } > RAM AT > FLASH
+
+  PROVIDE(_vector_table_1 = ADDR(.vector_table_1));
+  PROVIDE(_reset_1 = ADDR(.vector_table_1) + 0x4);
+
   
-  
-  PROVIDE(__stext = ADDR(.vector_table) + SIZEOF(.vector_table));
+  PROVIDE(__stext = ADDR(.vector_table_1) + SIZEOF(.vector_table_1));
 
   /* ### .text */
   .text __stext :

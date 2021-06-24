@@ -82,9 +82,16 @@ impl Peripheral {
 
     pub const PTR: *mut self::RegisterBlock = super::SIO_BASE as *mut _;
 
+    /* \brief Get the current core number
+    *
+    * \return The core number the call was made from
+    */
+    #[inline(never)]
+    pub fn get_core_num(&self) -> u32 {
+        return self.cpuid.read();
+    }
 
     /* \brief Check the read FIFO to see if there is data waiting
-    *  \ingroup multicore_fifo
     *
     *  \return true if the FIFO has data in it, false otherwise
     */
@@ -95,7 +102,6 @@ impl Peripheral {
     }
 
     /* \brief Check the write FIFO to see if it is ready for more data
-    *  \ingroup multicore_fifo
     *
     *  @return true if the FIFO has room for more data, false otherwise
     */
@@ -106,7 +112,6 @@ impl Peripheral {
     }
 
     /* \brief Pop data from the FIFO.
-    *  \ingroup multicore_fifo
     *
     * This function will block until there is data ready to be read
     * Use multicore_fifo_rvalid() to check if data is ready to be read if you don't
@@ -125,7 +130,6 @@ impl Peripheral {
     }
 
     /* \brief Push data on to the FIFO.
-    *  \ingroup multicore_fifo
     *
     * This function will block until there is space for the data to be sent.
     * Use multicore_fifo_wready() to check if it is possible to write to the
@@ -145,7 +149,6 @@ impl Peripheral {
     }
 
     /* \brief Flush any data in the incoming FIFO
-    *  \ingroup multicore_fifo
     *
     */
     #[inline(never)]
