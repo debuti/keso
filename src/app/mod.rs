@@ -29,14 +29,17 @@ fn gpio_setup() {
 #[inline(never)]
 fn multicore_setup() {
   extern "C" {
-    // These symbols come from `linker.ld`
-    static _reset_1: *const usize;
-    static _stack1_start: *const usize;
-    static _vector_table_1: *const usize;
+    // These symbols come from `memory.ld`
+    static _reset_1: usize;
+    static _stack1_start: usize;
+    static _vector_table_1: usize; //0x
   }
   unsafe {
+    let reset_1: *const usize = _reset_1 as *const usize;
+    let stack1_start: *const usize = &_stack1_start;
+    let vector_table_1: *const usize = &_vector_table_1;
     let mut sio = mcal::sio::Peripheral::new();
-    sio.launch_core1(_reset_1, _stack1_start, _vector_table_1);
+    sio.launch_core1(reset_1, stack1_start ,vector_table_1);
   }
 }
 
@@ -63,22 +66,8 @@ const UART_RX_PIN: usize = 1;
 pub fn c0() -> ! {
   reset_setup();
   gpio_setup();
+  //delay(100000000);
   multicore_setup();
-  unsafe {
-    let mut iobank0 = mcal::iobank0::Peripheral::new();
-    loop {
-        //mcal::sio::SIO.lock().gpio_set(mcal::gpio::GPIO12);
-        iobank0.force_high(PICO_DEFAULT_LED_PIN);
-        delay(10000000);
-        //mcal::gpio::GPIOD.lock().gpio_clear(mcal::gpio::GPIO12);
-        iobank0.force_low(PICO_DEFAULT_LED_PIN);
-        delay(10000000);
-    }
-  }
-}
-
-#[inline(never)]
-pub fn c1() -> ! {
   uart_setup();
   unsafe {
     let mut uart = mcal::uart::Peripheral::new(mcal::uart::Uart::Uart0);
@@ -89,8 +78,22 @@ pub fn c1() -> ! {
   }
 }
 
+#[inline(never)]
+pub fn c1() -> ! {
+  unsafe {
+    let mut iobank0 = mcal::iobank0::Peripheral::new();
+    loop {
+        //mcal::sio::SIO.lock().gpio_set(mcal::gpio::GPIO12);
+        iobank0.force_high(PICO_DEFAULT_LED_PIN);
+        delay(1000000);
+        //mcal::gpio::GPIOD.lock().gpio_clear(mcal::gpio::GPIO12);
+        iobank0.force_low(PICO_DEFAULT_LED_PIN);
+        delay(1000000);
+    }
+  }
+}
+
 pub fn main() -> ! {
-  delay(100000000);
   unsafe {
     let sio = mcal::sio::Peripheral::new();
     if sio.get_core_num() == 0 {

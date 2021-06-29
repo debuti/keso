@@ -161,7 +161,7 @@ impl Peripheral {
     #[inline(never)]
     pub fn launch_core1(&mut self, entry: *const usize, sp: *const usize, vt: *const usize) {
         unsafe {
-            let cmd_sequence = [0, 0, 1, *vt, *sp, *entry];
+            let cmd_sequence = [0, 0, 1, vt as usize, sp as usize, entry as usize];
 
             let mut cm0p = super::cm0p::Peripheral::new();
 
@@ -181,7 +181,7 @@ impl Peripheral {
                 
                 // move to next state on correct response otherwise start over
                 seq = if cmd == response {seq + 1} else {0};
-                if seq < cmd_sequence.len() {break;}
+                if seq == cmd_sequence.len() {break;}
             }
         
             cm0p.irq_set_enabled(super::SIO_IRQ_PROC0, enabled);

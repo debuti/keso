@@ -55,50 +55,54 @@ pub fn reset_handler() -> ! {
         static mut __edata: u32; // End of .data section
         static __sidata: u32; // Start of .rodata section
         static mut _vector_table_0: u32; // Start of vector table core0
-        static mut _vector_table_1: u32; // Start of vector table core1    
-        static _vector_table_size: u32; // Vector table sizes        
+        static mut _vector_table_1: u32; // Start of vector table core1
     }
 
-    // Initialize (Zero) BSS
     unsafe {
-        let mut sbss: *mut u32 = &mut __sbss;
-        let ebss: *mut u32 = &mut __ebss;
-
-        while sbss < ebss {
-            write_volatile(sbss, zeroed());
-            sbss = sbss.offset(1);
+      let sio = app::mcal::sio::Peripheral::new();
+      if sio.get_core_num() == 0 {
+        // Initialize (Zero) BSS
+        unsafe {
+            let mut sbss: *mut u32 = &mut __sbss;
+            let ebss: *mut u32 = &mut __ebss;
+    
+            while sbss < ebss {
+                write_volatile(sbss, zeroed());
+                sbss = sbss.offset(1);
+            }
         }
-    }
-
-    // Initialize Data
-    unsafe {
-        let mut sdata: *mut u32 = &mut __sdata;
-        let edata: *mut u32 = &mut __edata;
-        let mut sidata: *const u32 = &__sidata;
-
-        while sdata < edata {
-            write_volatile(sdata, read(sidata));
-            sdata = sdata.offset(1);
-            sidata = sidata.offset(1);
+    
+        // Initialize Data
+        unsafe {
+            let mut sdata: *mut u32 = &mut __sdata;
+            let edata: *mut u32 = &mut __edata;
+            let mut sidata: *const u32 = &__sidata;
+    
+            while sdata < edata {
+                write_volatile(sdata, read(sidata));
+                sdata = sdata.offset(1);
+                sidata = sidata.offset(1);
+            }
         }
-    }
-
-    // Setup vector table for core 1
-    unsafe {
-        let mut ptr0: *mut u32 = &mut _vector_table_0;
-        let end: *mut u32 = &mut _vector_table_1;
-        let mut ptr1: *mut u32 = &mut _vector_table_1;
-
-        while ptr0 < end {
-            ptr0 = ptr0.offset(1);
-            ptr1 = ptr1.offset(1);
-            write_volatile(ptr1, read(ptr0));
+    
+        // Setup vector table for core 1
+        unsafe {
+            let mut ptr0: *mut u32 = &mut _vector_table_0;
+            let end: *mut u32 = &mut _vector_table_1;
+            let mut ptr1: *mut u32 = &mut _vector_table_1;
+    
+            while ptr0 < end {
+                ptr0 = ptr0.offset(1);
+                ptr1 = ptr1.offset(1);
+                write_volatile(ptr1, read(ptr0));
+            }
         }
+    
+        // Set clocking
+        clocks_init();
+      }
     }
-
-    // Set clocking
-    clocks_init();
-
+    
     // Call user's main function
     app::main()
 }
