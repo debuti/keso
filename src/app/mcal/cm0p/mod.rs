@@ -6,6 +6,36 @@ use core::marker::PhantomData;
 
 pub mod defs;
 
+#[derive(Copy, Clone)]
+pub enum IrqId {
+    Timer0 = 0,
+    Timer1 = 1,
+    Timer2 = 2,
+    Timer3 = 3,
+    PwmWrap = 4,
+    UsbCtrl = 5,
+    Xip = 6,
+    Pio0_0 = 7,
+    Pio0_1 = 8,
+    Pio1_0 = 9,
+    Pio1_1 = 10,
+    Dma0 = 11,
+    Dma1 = 12,
+    IoBank0 = 13,
+    IoQspi = 14,
+    SioProc0 = 15,
+    SioProc1 = 16,
+    Clocks = 17,
+    Spi0 = 18,
+    Spi1 = 19,
+    Uart0 = 20,
+    Uart1 = 21,
+    AdcFifo = 22,
+    I2C0 = 23,
+    I2C1 = 24,
+    Rtc = 25,
+}
+
 /**
   \brief  Structure type to access the System Timer (SysTick).
  */
@@ -65,10 +95,14 @@ pub struct MPU_Type {
 
 #[repr(C)]
 pub struct RegisterBlock {
-    systick: SysTick_Type,
-    nvic: NVIC_Type,
-    scb: SCB_Type,
-    mpu: MPU_Type,
+    _reserved0: [Volatile<u8>;0xe010],
+    systick: SysTick_Type,                 /* Offset: 0xe010 */
+    _reserved1: [Volatile<u8>;0xe100 - core::mem::size_of::<SysTick_Type>() - 0xe010],
+    nvic: NVIC_Type,                       /* Offset: 0xe100 */
+    _reserved2: [Volatile<u8>;0xed00 - core::mem::size_of::<NVIC_Type>() - 0xe100],
+    scb: SCB_Type,                         /* Offset: 0xed00 */
+    _reserved3: [Volatile<u8>;0xed90 - core::mem::size_of::<SCB_Type>() - 0xed00],
+    mpu: MPU_Type,                         /* Offset: 0xed90 */
 }
 
 pub struct Peripheral {
@@ -86,21 +120,21 @@ impl Peripheral {
     }
 
     pub const PTR: *mut self::RegisterBlock = super::PPB_BASE as *mut _;
-
-    fn check_irq_param(num: u32) {
-        assert_eq!(false, num >= super::NUM_IRQS);
+    
+    fn check_irq_param(irq: IrqId) {
+        assert!((irq as u32) < super::NUM_IRQS);
     }
 
     #[inline(never)]
-    pub fn irq_is_enabled(&self, num: u32) -> bool {
-        Self::check_irq_param(num);
-        (self.nvic.iser.read() & (1 << num)) != 0
+    pub fn irq_is_enabled(&self, irq: IrqId) -> bool {
+        Self::check_irq_param(irq);
+        (self.nvic.iser.read() & (1 << irq as u32)) != 0
     }
 
     #[inline(never)]
-    pub fn irq_set_enabled(&mut self, num: u32, enabled: bool) {
-        Self::check_irq_param(num);
-        self.irq_set_mask_enabled(1 << num, enabled);
+    pub fn irq_set_enabled(&mut self, irq: IrqId, enabled: bool) {
+        Self::check_irq_param(irq);
+        self.irq_set_mask_enabled(1 << irq as u32, enabled);
     }
     
     #[inline(never)]
@@ -115,6 +149,55 @@ impl Peripheral {
         }
     }
     
+    #[inline(never)]
+    pub fn irq_set_exclusive_handler(&mut self, irq: IrqId, handler: fn()) {
+        Self::check_irq_param(irq);
+        unsafe {
+            let mut sio = super::sio::Peripheral::new();
+            let saved = sio.spin_lock_blocking(super::sio::SpinlockID::Irq as usize);
+            
+            let current = self.irq_get_vtable_handler(irq);
+            assert!(current != handler);
+            // update vtable (vtable_handler may be same or updated depending on cases, but we do it anyway for compactness)
+            self.irq_set_vtable_handler(irq, handler);
+            //crate::app::mcal::timer::Peripheral::delay(100000000);
+            super::intrinsics::dmb();
+            let mut sio = super::sio::Peripheral::new();
+            sio.spin_unlock(super::sio::SpinlockID::Irq as usize, saved);
+        }
+    }
+
+    #[inline(never)]
+    fn irq_get_vtable_handler(&self, irq: IrqId) -> fn() {
+        Self::check_irq_param(irq);
+        unsafe {
+          let vt = self.scb.vtor.read() as *const fn();
+          let vtable = core::slice::from_raw_parts(vt, 48);
+          vtable[16 + irq as usize]
+        }
+    }
+
+    #[inline(never)]
+    fn irq_set_vtable_handler(&self, irq: IrqId, handler: fn()) {
+        Self::check_irq_param(irq);
+        unsafe {
+          let vt = self.scb.vtor.read() as *mut fn();
+          let vtable = core::slice::from_raw_parts_mut(vt, 48);
+          vtable[16 + irq as usize] = handler;
+        }
+    }
+    
+    #[inline(never)]
+    pub fn save_and_disable_interrupts() -> u32 {
+        let status = super::intrinsics::getprimask();
+        super::intrinsics::disirq();
+        status
+    }
+    
+    #[inline(never)]
+    pub fn restore_interrupts(irq:u32){
+        super::intrinsics::enairq(irq);
+    }
 }
 
 impl ops::Deref for Peripheral {

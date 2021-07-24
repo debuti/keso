@@ -62,7 +62,7 @@ pub fn reset_handler() -> ! {
       let sio = app::mcal::sio::Peripheral::new();
       if sio.get_core_num() == 0 {
         // Initialize (Zero) BSS
-        unsafe {
+        /* unsafe */ {
             let mut sbss: *mut u32 = &mut __sbss;
             let ebss: *mut u32 = &mut __ebss;
     
@@ -73,7 +73,7 @@ pub fn reset_handler() -> ! {
         }
     
         // Initialize Data
-        unsafe {
+        /* unsafe */ {
             let mut sdata: *mut u32 = &mut __sdata;
             let edata: *mut u32 = &mut __edata;
             let mut sidata: *const u32 = &__sidata;
@@ -86,7 +86,7 @@ pub fn reset_handler() -> ! {
         }
     
         // Setup vector table for core 1
-        unsafe {
+        /* unsafe */ {
             let mut ptr0: *mut u32 = &mut _vector_table_0;
             let end: *mut u32 = &mut _vector_table_1;
             let mut ptr1: *mut u32 = &mut _vector_table_1;

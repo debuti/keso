@@ -2,12 +2,6 @@ pub mod mcal;
 
 pub const PICO_DEFAULT_LED_PIN: usize = 25;
 
- #[inline(never)]
-pub fn delay(ticks: usize) {
-    for _ in 0..ticks {
-        mcal::intrinsics::nop();
-    }
-}
 
 #[inline(never)]
 fn reset_setup() {
@@ -66,33 +60,44 @@ const UART_RX_PIN: usize = 1;
 pub fn c0() -> ! {
   reset_setup();
   gpio_setup();
-  //delay(100000000);
   multicore_setup();
+  unsafe {
+    let mut timer = mcal::timer::Peripheral::new();
+    //mcal::timer::Peripheral::delay(100000000);
+    timer.set_alarm_relative(mcal::timer::AlarmId::Alarm0, 5_000_000, timerhandler); 
+    loop {}
+  }
+}
+
+#[no_mangle]
+#[inline(never)]
+pub fn timerhandler() {
+  unsafe {
+    let mut iobank0 = mcal::iobank0::Peripheral::new();
+//    loop {
+//        //mcal::sio::SIO.lock().gpio_set(mcal::gpio::GPIO12);
+    iobank0.force_high(PICO_DEFAULT_LED_PIN);
+//        delay(1000000);
+//        //mcal::gpio::GPIOD.lock().gpio_clear(mcal::gpio::GPIO12);
+//        iobank0.force_low(PICO_DEFAULT_LED_PIN);
+//        delay(1000000);
+//    }  
+  }
+}
+
+#[inline(never)]
+pub fn c1() -> ! {
   uart_setup();
   unsafe {
     let mut uart = mcal::uart::Peripheral::new(mcal::uart::Uart::Uart0);
     loop {
-        delay(10000000);
+        mcal::timer::Peripheral::delay(10000000);
         uart.puts("Hello, keso!\n");
     }
   }
 }
 
 #[inline(never)]
-pub fn c1() -> ! {
-  unsafe {
-    let mut iobank0 = mcal::iobank0::Peripheral::new();
-    loop {
-        //mcal::sio::SIO.lock().gpio_set(mcal::gpio::GPIO12);
-        iobank0.force_high(PICO_DEFAULT_LED_PIN);
-        delay(1000000);
-        //mcal::gpio::GPIOD.lock().gpio_clear(mcal::gpio::GPIO12);
-        iobank0.force_low(PICO_DEFAULT_LED_PIN);
-        delay(1000000);
-    }
-  }
-}
-
 pub fn main() -> ! {
   unsafe {
     let sio = mcal::sio::Peripheral::new();

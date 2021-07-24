@@ -6,6 +6,61 @@ use core::marker::PhantomData;
 
 pub mod defs;
 
+
+/** \file hardware/sync.h
+ *  \defgroup hardware_sync hardware_sync
+ *
+ * Low level hardware spin locks, barrier and processor event APIs
+ *
+ * Spin Locks
+ * ----------
+ *
+ * The RP2040 provides 32 hardware spin locks, which can be used to manage mutually-exclusive access to shared software
+ * and hardware resources.
+ *
+ * Generally each spin lock itself is a shared resource,
+ * i.e. the same hardware spin lock can be used by multiple higher level primitives (as long as the spin locks are neither held for long periods, nor
+ * held concurrently with other spin locks by the same core - which could lead to deadlock). A hardware spin lock that is exclusively owned can be used
+ * individually without more flexibility and without regard to other software. Note that no hardware spin lock may
+ * be acquired re-entrantly (i.e. hardware spin locks are not on their own safe for use by both thread code and IRQs) however the default spinlock related
+ * methods here (e.g. \ref spin_lock_blocking) always disable interrupts while the lock is held as use by IRQ handlers and user code is common/desirable,
+ * and spin locks are only expected to be held for brief periods.
+ *
+ * The SDK uses the following default spin lock assignments, classifying which spin locks are reserved for exclusive/special purposes
+ * vs those suitable for more general shared use:
+ *
+ * Number (ID) | Description
+ * :---------: | -----------
+ * 0-13        | Currently reserved for exclusive use by the SDK and other libraries. If you use these spin locks, you risk breaking SDK or other library functionality. Each reserved spin lock used individually has its own PICO_SPINLOCK_ID so you can search for those.
+ * 14,15       | (\ref PICO_SPINLOCK_ID_OS1 and \ref PICO_SPINLOCK_ID_OS2). Currently reserved for exclusive use by an operating system (or other system level software) co-existing with the SDK.
+ * 16-23       | (\ref PICO_SPINLOCK_ID_STRIPED_FIRST - \ref PICO_SPINLOCK_ID_STRIPED_LAST). Spin locks from this range are assigned in a round-robin fashion via \ref next_striped_spin_lock_num(). These spin locks are shared, but assigning numbers from a range reduces the probability that two higher level locking primitives using _striped_ spin locks will actually be using the same spin lock.
+ * 24-31       | (\ref PICO_SPINLOCK_ID_CLAIM_FREE_FIRST - \ref PICO_SPINLOCK_ID_CLAIM_FREE_LAST). These are reserved for exclusive use and are allocated on a first come first served basis at runtime via \ref spin_lock_claim_unused()
+ */
+
+ pub enum SpinlockID {
+    Irq = 9,
+    Timer = 10,
+    HardwareClaim = 11,
+    Os1 = 14,
+    Os2 = 15,
+    Striped0 = 16,
+    Striped1 = 17,
+    Striped2 = 18,
+    Striped3 = 19,
+    Striped4 = 20,
+    Striped5 = 21,
+    Striped6 = 22,
+    Striped7 = 23,
+    ClaimFree0 = 24,
+    ClaimFree1 = 25,
+    ClaimFree2 = 26,
+    ClaimFree3 = 27,
+    ClaimFree4 = 28,
+    ClaimFree5 = 29,
+    ClaimFree6 = 30,
+    ClaimFree7 = 31,
+}
+
 #[repr(C)]
 pub struct interp_hw {
     accum: [Volatile<u32>; 2],
@@ -165,8 +220,8 @@ impl Peripheral {
 
             let mut cm0p = super::cm0p::Peripheral::new();
 
-            let enabled = cm0p.irq_is_enabled(super::SIO_IRQ_PROC0);
-            cm0p.irq_set_enabled(super::SIO_IRQ_PROC0, false);
+            let enabled = cm0p.irq_is_enabled(super::cm0p::IrqId::SioProc0);
+            cm0p.irq_set_enabled(super::cm0p::IrqId::SioProc0, false);
         
             let mut seq = 0;
             loop {
@@ -184,9 +239,30 @@ impl Peripheral {
                 if seq == cmd_sequence.len() {break;}
             }
         
-            cm0p.irq_set_enabled(super::SIO_IRQ_PROC0, enabled);
+            cm0p.irq_set_enabled(super::cm0p::IrqId::SioProc0, enabled);
         }
     }
+    
+    #[inline(never)]
+    pub fn spin_lock_blocking(&mut self, lock:usize) -> u32 {
+        let save = super::cm0p::Peripheral::save_and_disable_interrupts();
+        // Note we don't do a wfe or anything, because by convention these spin_locks are VERY SHORT LIVED and NEVER BLOCK and run
+        // with INTERRUPTS disabled (to ensure that)... therefore nothing on our core could be blocking us, so we just need to wait on another core
+        // anyway which should be finished soon
+        loop {
+            if self.spinlock[lock].read() != 0 {break;}
+        }
+        super::intrinsics::dmb();
+        return save;
+    }
+   
+    #[inline(never)]
+    pub fn spin_unlock(&mut self, lock:usize, irq:u32) {
+        super::intrinsics::dmb();
+        self.spinlock[lock].write(0);
+        super::cm0p::Peripheral::restore_interrupts(irq);
+    }
+
 }
 
 impl ops::Deref for Peripheral {

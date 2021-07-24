@@ -39,4 +39,36 @@ __wfe:
   push {lr}
   wfe
   pop {pc}
+
+.global __dmb
+.type __dmb,%function
+.thumb_func
+__dmb:
+  push {lr}
+  dmb
+  pop {pc}
+
+.global __getprimask
+.type __getprimask,%function
+.thumb_func
+__getprimask:
+  push {lr}
+  mrs r0, PRIMASK
+  pop {pc}
+
+.global __disirq
+.type __disirq,%function
+.thumb_func
+__disirq:
+  push {lr}
+  cpsid i
+  pop {pc}
+
+.global __enairq
+.type __enairq,%function
+.thumb_func
+__enairq:
+  push {lr}
+  msr PRIMASK, r0
+  pop {pc}
   
