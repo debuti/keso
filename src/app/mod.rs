@@ -42,7 +42,7 @@ fn uart_setup() {
   unsafe {
     // Set up our UART with the required speed.
     let mut uart = mcal::uart::Peripheral::new(mcal::uart::Uart::Uart0);
-    uart.uart_init(115200);
+    let _ = uart.uart_init(115200);
         
     // Set the TX and RX pins by using the function select on the GPIO
     // Set datasheet for more information on function select
@@ -55,6 +55,9 @@ fn uart_setup() {
 const UART_TX_PIN: usize = 0;
 const UART_RX_PIN: usize = 1;
 
+const DELAY: u32 = 1_000_000;
+const ALARM: mcal::timer::AlarmId = mcal::timer::AlarmId::Alarm0;
+static mut LEDST: bool = false;
 
 #[inline(never)]
 pub fn c0() -> ! {
@@ -63,25 +66,39 @@ pub fn c0() -> ! {
   multicore_setup();
   unsafe {
     let mut timer = mcal::timer::Peripheral::new();
-    //mcal::timer::Peripheral::delay(100000000);
-    timer.set_alarm_relative(mcal::timer::AlarmId::Alarm0, 5_000_000, timerhandler); 
-    loop {}
+    timer.set_alarm_relative(ALARM, DELAY, timerhandleron); 
+  }
+  loop {}
+}
+
+#[no_mangle]
+#[inline(never)]
+pub fn timerhandleron() {
+  unsafe {
+    let mut timer = mcal::timer::Peripheral::new();
+
+    timer.clear_alarm(ALARM);
+    
+    let mut iobank0 = mcal::iobank0::Peripheral::new();
+    iobank0.force_high(PICO_DEFAULT_LED_PIN);
+    
+    //mcal::timer::Peripheral::delay_nops(1000000000);
+    timer.set_alarm_relative(ALARM, DELAY, timerhandleroff); 
   }
 }
 
 #[no_mangle]
 #[inline(never)]
-pub fn timerhandler() {
+pub fn timerhandleroff() {
   unsafe {
+    let mut timer = mcal::timer::Peripheral::new();
+
+    timer.clear_alarm(ALARM);
+    
     let mut iobank0 = mcal::iobank0::Peripheral::new();
-//    loop {
-//        //mcal::sio::SIO.lock().gpio_set(mcal::gpio::GPIO12);
-    iobank0.force_high(PICO_DEFAULT_LED_PIN);
-//        delay(1000000);
-//        //mcal::gpio::GPIOD.lock().gpio_clear(mcal::gpio::GPIO12);
-//        iobank0.force_low(PICO_DEFAULT_LED_PIN);
-//        delay(1000000);
-//    }  
+    iobank0.force_low(PICO_DEFAULT_LED_PIN);
+ 
+    timer.set_alarm_relative(ALARM, DELAY, timerhandleron); 
   }
 }
 
@@ -91,7 +108,7 @@ pub fn c1() -> ! {
   unsafe {
     let mut uart = mcal::uart::Peripheral::new(mcal::uart::Uart::Uart0);
     loop {
-        mcal::timer::Peripheral::delay(10000000);
+        mcal::timer::Peripheral::delay_nops(10000000);
         uart.puts("Hello, keso!\n");
     }
   }

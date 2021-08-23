@@ -51,15 +51,22 @@ impl Peripheral {
 
     pub const PTR: *mut self::RegisterBlock = super::TIMER_BASE as *mut _;
 
+    #[inline(never)]
     pub fn get_time(&self) -> u64 {
-        ((self.timehr.read() as u64)<<32)|(self.timelr.read() as u64)
+        (self.timelr.read() as u64)|((self.timehr.read() as u64)<<32)
     }
 
     #[inline(never)]
-    pub fn set_alarm_relative(&mut self, idx: AlarmId, delay: u32, handler: fn()) {
+    /**
+     * The timer has 4 alarms, and outputs a separate interrupt for each alarm. 
+     * The alarms match on the lower 32 bits of the 64-bit counter which means they
+     * can be fired at a maximum of 2 32 microseconds into the future. This is equivalent to:
+     *    2^32 ÷ 10 = ~4295 seconds = ~72 minutes
+     */
+    pub fn set_alarm_relative(&mut self, idx: AlarmId, delayus: u32, handler: fn()) {
         // Enable the interrupt for our alarm (the timer outputs 4 alarm irqs)
         let t = self.inte.read();
-        self.inte.write(t|1<<idx as usize);
+        self.inte.write(t | 1<<idx as usize);
         // Set irq handler for alarm irq
         let irqid = match idx {
             AlarmId::Alarm0 => super::cm0p::IrqId::Timer0,
@@ -76,20 +83,45 @@ impl Peripheral {
         // Alarm is only 32 bits so if trying to delay more
         // than that need to be careful and keep track of the upper
         // bits
-        let target = self.timerawl.read() + delay;
+        let target = self.timerawl.read() + delayus;
         // Write the lower 32 bits of the target time to the alarm which
         // will arm it
         self.alarm[idx as usize].write(target);
     }
 
+    #[inline(never)]
     pub fn clear_alarm(&mut self, idx: AlarmId){
+        // Raw interrupts (W1C)
         let t = self.intr.read();
-        self.intr.write(t & !(1<<idx as usize));
+        self.intr.write(t | 1<<idx as usize);
+        //
+        unsafe {
+            let irqid = match idx {
+                AlarmId::Alarm0 => super::cm0p::IrqId::Timer0,
+                AlarmId::Alarm1 => super::cm0p::IrqId::Timer1,
+                AlarmId::Alarm2 => super::cm0p::IrqId::Timer2,
+                AlarmId::Alarm3 => super::cm0p::IrqId::Timer3,
+            };
+            let mut cm0p = super::cm0p::Peripheral::new();
+            // Disable the alarm irq
+            cm0p.irq_set_enabled(irqid, false);
+        }
+        // Disable the interrupt for our alarm
+        let t = self.inte.read();
+        self.inte.write(t & !(1<<idx as usize));
     }
 
     #[inline(never)]
-    pub fn delay(ticks: usize) {
-        for _ in 0..ticks {
+    pub fn delay(&self, delayus: u32) {
+        let target = self.get_time() + delayus as u64;
+        loop {
+            if self.get_time() > target {return;}
+        }
+    }
+
+    #[inline(never)]
+    pub fn delay_nops(nops: u32) {
+        for _ in 0..nops {
             crate::app::mcal::intrinsics::nop();
         }
     }

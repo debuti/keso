@@ -221,3 +221,9 @@ pub static __USAGE_FAULT: fn() -> ! = usage_fault_handler;
 pub fn usage_fault_handler() -> ! {
     loop {}
 }
+
+#[no_mangle]
+pub fn unhandler() {
+    loop {}
+}
+

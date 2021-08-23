@@ -8,7 +8,7 @@ pub mod defs;
 
 #[derive(Copy, Clone)]
 pub enum IrqId {
-    Timer0 = 0,
+    Timer0 = 0,  // So exception number 16
     Timer1 = 1,
     Timer2 = 2,
     Timer3 = 3,
@@ -139,12 +139,14 @@ impl Peripheral {
     
     #[inline(never)]
     pub fn irq_set_mask_enabled(&mut self, mask: u32, enabled: bool) {
+        // Clear pending before enable (W 1 to set to not pending)
+        // (if IRQ is actually asserted, it will immediately re-pend)
+        self.nvic.icpr.write(mask);
         if enabled {
-            // Clear pending before enable
-            // (if IRQ is actually asserted, it will immediately re-pend)
-            self.nvic.icpr.write(mask);
+            // Interrupt set enable (W 1 to enable the interrupt)
             self.nvic.iser.write(mask);
         } else {
+            // Interrupt clear enable (W 1 to disable the interrupt)
             self.nvic.icer.write(mask);
         }
     }
@@ -155,16 +157,17 @@ impl Peripheral {
         unsafe {
             let mut sio = super::sio::Peripheral::new();
             let saved = sio.spin_lock_blocking(super::sio::SpinlockID::Irq as usize);
-            
-            let current = self.irq_get_vtable_handler(irq);
-            assert!(current != handler);
             // update vtable (vtable_handler may be same or updated depending on cases, but we do it anyway for compactness)
             self.irq_set_vtable_handler(irq, handler);
             //crate::app::mcal::timer::Peripheral::delay(100000000);
             super::intrinsics::dmb();
-            let mut sio = super::sio::Peripheral::new();
             sio.spin_unlock(super::sio::SpinlockID::Irq as usize, saved);
         }
+    }
+
+    #[inline(never)]
+    pub fn irq_reset_handler(&mut self, irq: IrqId) {
+        self.irq_set_exclusive_handler(irq, crate::unhandler);
     }
 
     #[inline(never)]
