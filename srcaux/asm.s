@@ -72,3 +72,28 @@ __enairq:
   msr PRIMASK, r0
   pop {pc}
   
+.global __setcontrol
+.type __setcontrol,%function
+.thumb_func
+__setcontrol:
+  push {r2, lr}
+  lsl r2, r1, #1
+  orr r2, r0
+  msr CONTROL, r2
+  pop {r2, pc}
+  
+.global __getcontrol
+.type __getcontrol,%function
+.thumb_func
+__getcontrol:
+  push {lr}
+  mrs r0, CONTROL
+  pop {pc}
+  
+.global __getpsp
+.type __getpsp,%function
+.thumb_func
+__getpsp:
+  push {lr}
+  mrs r0, PSP
+  pop {pc}

@@ -67,4 +67,5 @@ This software project follows the license (CC BY-NC-SA 4.0)[https://creativecomm
 * Use timer to blink a led
 * Use timers to create a primitive scheduler
 * Create the concept of task
-* Sync both cores with spinlocks
+* Sync both cores with spinlocks/barriers, to sync the schedule tables
+* Remove unsafe blocks!!

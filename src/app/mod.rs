@@ -1,4 +1,5 @@
 pub mod mcal;
+mod tasks;
 
 pub const PICO_DEFAULT_LED_PIN: usize = 25;
 
@@ -26,7 +27,7 @@ fn multicore_setup() {
     // These symbols come from `memory.ld`
     static _reset_1: usize;
     static _stack1_start: usize;
-    static _vector_table_1: usize; //0x
+    static _vector_table_1: usize;
   }
   unsafe {
     let reset_1: *const usize = _reset_1 as *const usize;
@@ -36,6 +37,9 @@ fn multicore_setup() {
     sio.launch_core1(reset_1, stack1_start ,vector_table_1);
   }
 }
+
+const UART_TX_PIN: usize = 0;
+const UART_RX_PIN: usize = 1;
 
 #[inline(never)]
 fn uart_setup() {
@@ -52,77 +56,76 @@ fn uart_setup() {
   }
 }
 
-const UART_TX_PIN: usize = 0;
-const UART_RX_PIN: usize = 1;
-
-const DELAY: u32 = 1_000_000;
-const ALARM: mcal::timer::AlarmId = mcal::timer::AlarmId::Alarm0;
-static mut LEDST: bool = false;
-
-#[inline(never)]
-pub fn c0() -> ! {
+pub fn one_time_init() {
   reset_setup();
   gpio_setup();
-  multicore_setup();
-  unsafe {
-    let mut timer = mcal::timer::Peripheral::new();
-    timer.set_alarm_relative(ALARM, DELAY, timerhandleron); 
-  }
-  loop {}
-}
-
-#[no_mangle]
-#[inline(never)]
-pub fn timerhandleron() {
-  unsafe {
-    let mut timer = mcal::timer::Peripheral::new();
-
-    timer.clear_alarm(ALARM);
-    
-    let mut iobank0 = mcal::iobank0::Peripheral::new();
-    iobank0.force_high(PICO_DEFAULT_LED_PIN);
-    
-    //mcal::timer::Peripheral::delay_nops(1000000000);
-    timer.set_alarm_relative(ALARM, DELAY, timerhandleroff); 
-  }
-}
-
-#[no_mangle]
-#[inline(never)]
-pub fn timerhandleroff() {
-  unsafe {
-    let mut timer = mcal::timer::Peripheral::new();
-
-    timer.clear_alarm(ALARM);
-    
-    let mut iobank0 = mcal::iobank0::Peripheral::new();
-    iobank0.force_low(PICO_DEFAULT_LED_PIN);
- 
-    timer.set_alarm_relative(ALARM, DELAY, timerhandleron); 
-  }
-}
-
-#[inline(never)]
-pub fn c1() -> ! {
   uart_setup();
+  //multicore_setup();
+}
+
+#[inline(never)]
+pub fn c0(schedtable : tasks::SchedTable) -> ! {
+  // Do the required initializations here
+  one_time_init();
+  
+  // Start scheduler in core0
+  schedtable.start();
+}
+
+
+#[inline(never)]
+pub fn c1(schedtable : tasks::SchedTable) -> ! {
+
+  // Start scheduler in core1
+  schedtable.start();
+}
+
+#[inline(never)]
+pub fn taskled() {  
+  static mut LEDST: bool = false;
+  unsafe {
+    let mut iobank0 = mcal::iobank0::Peripheral::new();
+    if LEDST {
+      iobank0.force_low(PICO_DEFAULT_LED_PIN);
+    }
+    else {
+      iobank0.force_high(PICO_DEFAULT_LED_PIN);
+    }
+    LEDST = !LEDST;
+    //mcal::timer::Peripheral::delay_nops(1000000000); 
+  }
+}
+
+#[inline(never)]
+pub fn tasknop() {
+  //NOP FOREVER!
+  mcal::timer::Peripheral::delay_nops(4294967295);   
+}
+
+#[inline(never)]
+pub fn taskuart() {
   unsafe {
     let mut uart = mcal::uart::Peripheral::new(mcal::uart::Uart::Uart0);
-    loop {
-        mcal::timer::Peripheral::delay_nops(10000000);
-        uart.puts("Hello, keso!\n");
-    }
+    //mcal::timer::Peripheral::delay_nops(10000000);
+    uart.puts("Hello, keso!\n");
   }
 }
 
 #[inline(never)]
 pub fn main() -> ! {
   unsafe {
-    let sio = mcal::sio::Peripheral::new();
-    if sio.get_core_num() == 0 {
-      c0();
+    if mcal::sio::Peripheral::new().get_core_num() == 0 {
+      c0(tasks::SchedTable { macroperiod : 1_000_000,
+                             schedpoints : &mut[(0,       tasks::Task::new("c0t0", taskled, &mut [0xCAFECAFE; 512], 512, 0)),
+                                                (500_000, tasks::Task::new("c0t1", tasknop, &mut [0xCAFECAFE; 512], 512, 0)),
+                                               ],
+                           });
     }
     else {
-      c1();
+      c1(tasks::SchedTable { macroperiod : 10_000_000,
+                             schedpoints : &mut[(0,       tasks::Task::new("c1t0", taskuart, &mut [0xCAFECAFE; 512], 512, 0)),
+                                               ],
+                           });
     }
   }
 }

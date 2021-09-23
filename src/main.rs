@@ -102,8 +102,8 @@ pub fn reset_handler() -> ! {
         clocks_init();
       }
     }
-    
-    // Call user's main function
+
+    // Call OS main function
     app::main()
 }
 

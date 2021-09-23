@@ -57,6 +57,12 @@ impl Peripheral {
     }
 
     #[inline(never)]
+    pub fn reset_time(&mut self) {
+        self.timelw.write(0);
+        self.timehw.write(0);
+    }
+
+    #[inline(never)]
     /**
      * The timer has 4 alarms, and outputs a separate interrupt for each alarm. 
      * The alarms match on the lower 32 bits of the 64-bit counter which means they
