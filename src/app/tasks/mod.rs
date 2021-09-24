@@ -8,8 +8,13 @@ pub enum TaskState {
   Halted
 }
 
-pub struct Task<'a> {
+pub struct Registers {
   pub sp: usize,
+  pub r4: u32,
+}
+
+pub struct Task<'a> {
+  pub regs: Registers,
   pub id: u32,
   pub name: &'static str,
   pub body: fn(),
@@ -36,7 +41,10 @@ impl<'a> Task<'a> {
 
     // Return the handle
     Self {
-      sp: stack[stacksize-8] as *mut usize as usize,
+      regs: Registers {
+        sp: stack[stacksize-8] as *mut usize as usize,
+        r4: 0,
+      },
       id: 0, //TODO: Take this value automatically
       name: name,
       body: body,
@@ -86,14 +94,15 @@ pub fn alarm0handler() {
           }
           // Save the context
           {
-            schedtab.schedpoints[idx-1].1.sp = super::mcal::intrinsics::getpsp();
-
+            schedtab.schedpoints[idx-1].1.regs.sp = super::mcal::intrinsics::getpsp();
+            schedtab.schedpoints[idx-1].1.regs.r4 = super::mcal::intrinsics::getrx(4);
             //TODO: Retrieve and save the rest of the registers
           }
           // Run the appropiate task          
           {
-            super::mcal::intrinsics::setpsp(schedtab.schedpoints[idx].1.sp);
-
+            super::mcal::intrinsics::setpsp(schedtab.schedpoints[idx].1.regs.sp);
+            super::mcal::intrinsics::setrx(4, schedtab.schedpoints[idx].1.regs.r4);
+            
             //TODO: Restore the rest of the registers
           }
         }
