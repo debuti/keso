@@ -42,6 +42,15 @@ pub struct Peripheral {
 unsafe impl Send for Peripheral {}
 
 impl Peripheral {
+    pub const fn get_irq(idx: AlarmId) -> super::cm0p::IrqId {
+        match idx {
+            AlarmId::Alarm0 => super::cm0p::IrqId::Timer0,
+            AlarmId::Alarm1 => super::cm0p::IrqId::Timer1,
+            AlarmId::Alarm2 => super::cm0p::IrqId::Timer2,
+            AlarmId::Alarm3 => super::cm0p::IrqId::Timer3,
+        }
+    }
+
     #[inline(always)]
     pub(crate) const unsafe fn new() -> Self {
         Self {
@@ -69,17 +78,12 @@ impl Peripheral {
      * can be fired at a maximum of 2 32 microseconds into the future. This is equivalent to:
      *    2^32 ÷ 10 = ~4295 seconds = ~72 minutes
      */
-    pub fn set_alarm_relative(&mut self, idx: AlarmId, delayus: u32, handler: fn()) {
+    pub fn set_alarm_relative(&mut self, idx: AlarmId, delayus: u32, handler: unsafe extern "C" fn()) {
         // Enable the interrupt for our alarm (the timer outputs 4 alarm irqs)
         let t = self.inte.read();
         self.inte.write(t | 1<<idx as usize);
         // Set irq handler for alarm irq
-        let irqid = match idx {
-            AlarmId::Alarm0 => super::cm0p::IrqId::Timer0,
-            AlarmId::Alarm1 => super::cm0p::IrqId::Timer1,
-            AlarmId::Alarm2 => super::cm0p::IrqId::Timer2,
-            AlarmId::Alarm3 => super::cm0p::IrqId::Timer3,
-        };
+        let irqid = Self::get_irq(idx);
         unsafe {
             let mut cm0p = super::cm0p::Peripheral::new();
             cm0p.irq_set_exclusive_handler(irqid, handler);
@@ -102,12 +106,7 @@ impl Peripheral {
         self.intr.write(t | 1<<idx as usize);
         //
         unsafe {
-            let irqid = match idx {
-                AlarmId::Alarm0 => super::cm0p::IrqId::Timer0,
-                AlarmId::Alarm1 => super::cm0p::IrqId::Timer1,
-                AlarmId::Alarm2 => super::cm0p::IrqId::Timer2,
-                AlarmId::Alarm3 => super::cm0p::IrqId::Timer3,
-            };
+            let irqid = Self::get_irq(idx);
             let mut cm0p = super::cm0p::Peripheral::new();
             // Disable the alarm irq
             cm0p.irq_set_enabled(irqid, false);

@@ -3,6 +3,7 @@
 ## Exceptions
 In ARM Cortex M microprocessors, and more especifically, in the ARMv6m architecture (M0 and M0+), the exceptions are handled as if they were functions. When an exception (1-15) or an interrupt (16-) is called (mind that interrupts are handled through the NVIC and you need to activate them if you want them to fire properly), the processor performs the following tasks:
  * Aligns (to 8) and pushes to the current stack, in this order, xPSR, PC+1, LR, R12, R3, R2, R1 and R0
+  ** M0+ resets to MSP stack and privileged mode
  * Saves EXC_RETURN into LR, the specific value is defined in the following paragraph
  * Enters handler (and thus privileged) mode. Handler makes use of MSP always
  * Retrieves the handler address from VTOR[nb] and jumps to it
@@ -21,7 +22,7 @@ Thanks to the EXC_RETURN value and the handler mode state, the core knows how to
  * Does some integrity checks
  * Restores the context from the stack and resumes the execution in the saved PC+1
 
-This is architected to allow plain functions work as exception handlers without any special treatment by the compiler. By saving the EXC_RETURN "flag" the core knows what to do
+This is architected to allow plain functions work as exception handlers without any special treatment by the compiler. By saving the EXC_RETURN "flag" the core knows what to do.
 
 Each exception has a priority (the lower the priority number, the higher the precedence the exception has), a number and a associated handler
 
@@ -68,20 +69,21 @@ We will use PSP for thread mode (tasks), and MSP for handler mode (OS). To achie
  CONTROL = 0x03 /* Unpriv Thread Mode w/ PSP */
  ISB
 
-before that the OS will prepare each task stack 
- 
- 
-__set_PSP(os_curr_task->sp+64); /* Set PSP to the top of task's stack */
+before that the OS will have to prepare each task stack 
+ PSP = task.sp+64 /* Set PSP to the top of the first task stack */
+
+the scheduler will launch each task in place, so the OS needs to populate the initial stack appropiately, as if the task was interrupted by a context switch at the very beginning of its execution
 
 ## Concept
 1. Tasks are created before releasing the scheduler
-1.1. The stack is created as a local array to the OS and its top is initialized
-1.2. 
+1.1. The task stack is created as a local array to the OS and its top is initialized
+1.2. The task body is prepared as a divergent function
 2. Schedule tables are created with expiry points and period, each expiry point will refer to a task
-3. Scheduler is started, the alarm for the first expirypoint is set.
-4. When the exception handler runs, it will switch to TODOOO
+3. Scheduler is started, the alarm for the second expirypoint is set. The kernel does a reconfiguration to use PSP and user mode, it jumps to the first task.
+4. When the exception handler fires, it will perform the context switch
 
 # Refs
  * ARMv6-M Architecture Reference Manual
  * https://www.embeddedrelated.com/showarticle/912.php
  * https://interrupt.memfault.com/blog/arm-cortex-m-exceptions-and-nvic
+ * https://github.com/adamheinrich/os.h/blob/master/src/os.c

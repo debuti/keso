@@ -150,9 +150,25 @@ impl Peripheral {
             self.nvic.icer.write(mask);
         }
     }
+
+    #[inline(never)]
+    pub fn irq_set_pending(&mut self, irq: IrqId, pending: bool) {
+        Self::check_irq_param(irq);
+        self.irq_set_mask_enabled(1 << irq as u32, pending);
+    }
     
     #[inline(never)]
-    pub fn irq_set_exclusive_handler(&mut self, irq: IrqId, handler: fn()) {
+    pub fn irq_set_mask_pending(&mut self, mask: u32, pending: bool) {
+        if pending {
+            self.nvic.ispr.write(mask);
+        }
+        else {
+            self.nvic.icpr.write(mask);
+        }        
+    }
+    
+    #[inline(never)]
+    pub fn irq_set_exclusive_handler(&mut self, irq: IrqId, handler: unsafe extern "C" fn()) {
         Self::check_irq_param(irq);
         unsafe {
             let mut sio = super::sio::Peripheral::new();
@@ -181,10 +197,10 @@ impl Peripheral {
     }
 
     #[inline(never)]
-    fn irq_set_vtable_handler(&self, irq: IrqId, handler: fn()) {
+    fn irq_set_vtable_handler(&self, irq: IrqId, handler: unsafe extern "C" fn()) {
         Self::check_irq_param(irq);
         unsafe {
-          let vt = self.scb.vtor.read() as *mut fn();
+          let vt = self.scb.vtor.read() as *mut unsafe extern "C" fn();
           let vtable = core::slice::from_raw_parts_mut(vt, 48);
           vtable[16 + irq as usize] = handler;
         }

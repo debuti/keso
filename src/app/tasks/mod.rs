@@ -5,17 +5,17 @@ pub enum TaskState {
   Waiting,
   Ready,
   Running,
-  Halted
+  Halted,
 }
 
+type TaskId = usize;
 pub struct Registers {
   pub sp: usize,
-  pub r4: u32,
 }
 
 pub struct Task<'a> {
   pub regs: Registers,
-  pub id: u32,
+  pub id: Option<TaskId>,
   pub name: &'static str,
   pub body: fn(),
   pub stack: &'a mut [u32],
@@ -25,27 +25,45 @@ pub struct Task<'a> {
 }
 
 impl<'a> Task<'a> {
-  pub fn new(name: &'static str, body: fn(), stack: &'a mut [u32], stacksize: usize, priority: u32) -> Self {
+  pub fn loopy() -> ! {
+    loop {}
+  }
+  pub fn new(
+    name: &'static str,
+    body: fn(),
+    stack: &'a mut [u32],
+    stacksize: usize,
+    priority: u32,
+  ) -> Self {
     // Check the alignment
-    if stacksize % 4 != 0 {panic!("Stack sizes need to be aligned to 4")}
+    if stacksize % 4 != 0 {
+      panic!("Stack sizes need to be aligned to 4")
+    }
 
     // Init the stack with the initial context
-    stack[stacksize-1] = 0x01000000;        // Initial XPSR: Thumb set, no exception
-    stack[stacksize-2] = body as u32;       // Initial PC: Task body  //TODO: Set LSB to 1 so thumb
-    stack[stacksize-3] = 0x0;               // Initial LR: Function that will be called when the task finish //TODO: Set this
-    stack[stacksize-4] = 0x0;               // Initial R12
-    stack[stacksize-5] = 0x0;               // Initial R3
-    stack[stacksize-6] = 0x0;               // Initial R2
-    stack[stacksize-7] = 0x0;               // Initial R1
-    stack[stacksize-8] = 0x0;               // Initial R0
+    stack[stacksize - 1] = 0x01000000;               // Initial XPSR: Thumb set, no exception
+    stack[stacksize - 2] = body as u32 | 0x1;        // Initial PC: Task body
+    stack[stacksize - 3] = Self::loopy as u32 | 0x1; // Initial LR: Function that will be called when the task finish
+    stack[stacksize - 4] = 0x12;                     // Initial R12
+    stack[stacksize - 5] = 0x3;                      // Initial R3
+    stack[stacksize - 6] = 0x2;                      // Initial R2
+    stack[stacksize - 7] = 0x1;                      // Initial R1
+    stack[stacksize - 8] = 0x0;                      // Initial R0
+    stack[stacksize - 9] = 0x11;                     // Initial R11
+    stack[stacksize - 10] = 0x10;                    // Initial R10
+    stack[stacksize - 11] = 0x9;                     // Initial R9
+    stack[stacksize - 12] = 0x8;                     // Initial R8
+    stack[stacksize - 13] = 0x7;                     // Initial R7
+    stack[stacksize - 14] = 0x6;                     // Initial R6
+    stack[stacksize - 15] = 0x5;                     // Initial R5
+    stack[stacksize - 16] = 0x4;                     // Initial R4
 
     // Return the handle
     Self {
       regs: Registers {
-        sp: stack[stacksize-8] as *mut usize as usize,
-        r4: 0,
+        sp: &stack[stacksize - 16] as *const u32 as usize,
       },
-      id: 0, //TODO: Take this value automatically
+      id: None,
       name: name,
       body: body,
       stack: stack,
@@ -56,100 +74,110 @@ impl<'a> Task<'a> {
   }
 }
 
-
 //TODO: Move to proper unit
 pub struct SchedTable<'a> {
-  pub macroperiod: u64,                       // in us
-  pub schedpoints: &'a mut [(u64, Task<'a>)], // Currently only one task is enabled at each sched point
+  pub macroperiod: u64,                // in us
+  pub tasks: &'a mut [Task<'a>],
+  pub schedpoints: &'a [(u64, usize)], // Currently only one task is enabled at each sched point
 }
 //pub struct Scheduler<'a> {
 //    pub coresched: [SchedTable<'a>; super::mcal::NUM_CORES as usize],
 //}
 
-  
-static mut C0ST: Option<usize> = None;
+extern "C" {
+  #[cfg(armv6m)]
+  fn ctxtswtr();
+}
 
+static mut C0ST: Option<(usize, usize)> = None;
+static mut C1ST: Option<(usize, usize)> = None;
 
 #[no_mangle]
 #[inline(never)]
-pub fn alarm0handler() {
-  //TODO: Implement this once. Maybe reading XPSR to see the actual exc being handled
+pub extern "C" fn alarmhandler(coreidx: u32, psp: usize, fromusermode: bool) -> usize {
   unsafe {
+    // Clear the alarm first
     let mut timer = super::mcal::timer::Peripheral::new();
-    let time = timer.get_time();
     timer.clear_alarm(super::mcal::timer::AlarmId::Alarm0);
 
-    if let Some(stptr) = C0ST {
+    let (corest, alarm) = match coreidx {
+      0 => (C0ST, super::mcal::timer::AlarmId::Alarm0),
+      1 => (C1ST, super::mcal::timer::AlarmId::Alarm1),
+      _ => unreachable!(),
+    };
+
+    if let Some((stptr, currentidx)) = corest {
       // Reborrow to deref raw ptr and get mutable reference to the sched table
       let schedtab = &mut *(stptr as *mut SchedTable);
-      
-      // Guess which was the fired schedule point
-      let t = time % schedtab.macroperiod;
+      let schedtablen = schedtab.schedpoints.len();
+      let nextidx = (currentidx + 1) % schedtablen;
+      C0ST = Some((stptr, nextidx));
 
-      for idx in (0..schedtab.schedpoints.len()).rev() {
-        if t >= schedtab.schedpoints[idx].0 {
-          // Configure the next alarm
-          {
-            timer.set_alarm_relative(super::mcal::timer::AlarmId::Alarm0, schedtab.schedpoints[idx+1].0 as u32, alarm0handler); 
-          }
-          // Save the context
-          {
-            schedtab.schedpoints[idx-1].1.regs.sp = super::mcal::intrinsics::getpsp();
-            schedtab.schedpoints[idx-1].1.regs.r4 = super::mcal::intrinsics::getrx(4);
-            //TODO: Retrieve and save the rest of the registers
-          }
-          // Run the appropiate task          
-          {
-            super::mcal::intrinsics::setpsp(schedtab.schedpoints[idx].1.regs.sp);
-            super::mcal::intrinsics::setrx(4, schedtab.schedpoints[idx].1.regs.r4);
-            
-            //TODO: Restore the rest of the registers
-          }
+      // Configure the next alarm
+      {
+        let delta = 
+        if schedtab.schedpoints[nextidx].0 > schedtab.schedpoints[currentidx].0 {
+          schedtab.schedpoints[nextidx].0 - schedtab.schedpoints[currentidx].0
         }
+        else {
+          schedtab.macroperiod - schedtab.schedpoints[currentidx].0
+        };
+
+        timer.set_alarm_relative(
+          alarm,
+          delta as u32,
+          ctxtswtr,
+        );
+      }
+      // Save the context
+      {
+        schedtab.tasks[schedtab.schedpoints[currentidx].1].regs.sp = psp;
+        schedtab.tasks[schedtab.schedpoints[currentidx].1].state = TaskState::Ready;
+      }
+      // Run the appropiate task
+      {
+        schedtab.tasks[schedtab.schedpoints[nextidx].1].state = TaskState::Running;
+        return schedtab.tasks[schedtab.schedpoints[nextidx].1].regs.sp;
       }
         
-      // TEST THIS
-      // CHECK THAT PSP IS PROPERLY SET AFTER THIS!!
-    } 
-    else {
-      panic!("Timer shouldn't be firing without schedule table"); // How the fuck the timer is running without 
+    } else {
+      panic!("Timer shouldn't be firing without schedule table"); // How the fuck the timer is running without
     }
   }
 }
 
-#[no_mangle]
-#[inline(never)]
-pub fn alarm1handler() {
-  unsafe {
-    let mut timer = super::mcal::timer::Peripheral::new();
-    timer.clear_alarm(super::mcal::timer::AlarmId::Alarm0);
-        // Run the appropiate task
- }
-}
-
-
 impl<'a> SchedTable<'a> {
   pub fn start(self) -> ! {
-
+    // Initialize task ids
+    for (idx, task) in self.tasks.iter_mut().enumerate() {
+      task.id = Some(idx);
+      task.state = TaskState::Ready;
+    }
+    // Launch the sched table
     unsafe {
       let mut timer = super::mcal::timer::Peripheral::new();
       let coreid = super::mcal::sio::Peripheral::new().get_core_num();
-      let (_alarm, _handler): (super::mcal::timer::AlarmId, fn()) = 
-        match coreid {
-          0 => (super::mcal::timer::AlarmId::Alarm0, alarm0handler),
-          1 => (super::mcal::timer::AlarmId::Alarm1, alarm1handler),
-          _ => panic!("Only two cores are supported")
-        };
-      if coreid == 0 {C0ST = Some((&self as *const Self) as usize);}
+      let alarm: super::mcal::timer::AlarmId = match coreid {
+        0 => super::mcal::timer::AlarmId::Alarm0,
+        1 => super::mcal::timer::AlarmId::Alarm1,
+        _ => panic!("Only two cores are supported"),
+      };
+
+      if coreid == 0 {
+        C0ST = Some(((&self as *const Self) as usize, 0));
+      } else {
+        loop {} /*TODO: Enable the second core only if the 1st core is working properly*/
+      }
+
       // Reset the time just before starting the scheduler
       timer.reset_time();
-      //TODO: Trigger the first alarm by hand!
-      //timer.set_alarm_relative(alarm, self.schedpoints[0].0, handler); 
+      // Trigger the first alarm by hand!
+      timer.set_alarm_relative(alarm, self.schedpoints[1].0 as u32, ctxtswtr);
+
+      // Setup process stack and user mode right before switching to task
+      super::mcal::intrinsics::launch(self.tasks[0].body, self.tasks[0].regs.sp + 64);
+      
+      loop {} // This wont ever be used but the compiler needs to know its divergent
     }
-
-    // Setup process stack and user mode right after switching to task
-    super::mcal::intrinsics::setcontrol(false, true); 
-
-    loop {}
   }
 }

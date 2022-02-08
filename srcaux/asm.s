@@ -10,11 +10,92 @@
 .cfi_startproc
 PreResetTrampoline:
   # set LR to the initial value used by the ARMv7-M (0xFFFF_FFFF)
-  ldr r0,=0xffffffff
-  mov lr,r0
+  mov r0, #0
+  sub r0, #1
+  mov lr, r0
   b reset_handler
 .cfi_endproc
 .size PreResetTrampoline, . - PreResetTrampoline
+
+.global ctxtswtr
+.type ctxtswtr,%function
+.thumb_func
+.cfi_startproc
+ctxtswtr:
+	cpsid	i
+
+  # Save (the rest of) the context to the stack
+  mrs r0, PSP
+  sub r0, #32
+  stmia r0!, {r4-r7}
+	mov	r4, r8
+	mov	r5, r9
+	mov	r6, r10
+	mov	r7, r11
+  stmia r0!, {r4-r7}
+  /*
+          |  ...  | ^- 0xFFFFFFFF
+          | xPSR  |
+          | PC+1  |
+          |  LR   |
+          |  R12  |
+          |  R3   |
+          |  R2   |
+          |  R1   |
+          |  R0   | <- Until here was pushed by the architecture
+          |  R11  |
+          |  R10  |
+          |  R9   |
+          |  R8   |
+          |  R7   |
+          |  R6   |
+          |  R5   |
+    SP -> |  R4   | <- Until here was pushed by us
+  */
+
+  # Identify running exception from xPSR
+  mrs r0, xPSR
+  mov r1, #0xFF
+  and r0, r1
+  sub r0, #0x10 /* R0 now holds the interrupt number */
+
+  # Retrieve PSP
+  mrs r1, PSP
+  sub r1, #32
+
+  # Identify if we come from kernel or user mode
+  mov r2, #0x0
+  sub r2, r2, #3
+  mov r3, LR
+  sub r2, r2, r3
+
+  # Call high level code to setup the next timer and return next task SP
+  bl alarmhandler /* R0 will hold the new PSP value */
+
+  # Restore PSP to next task SP
+  mov r1, r0
+  add r1, #16
+  ldmia	r1!, {r4-r7}
+	mov	r8, r4
+	mov	r9, r5
+	mov	r10, r6
+	mov	r11, r7
+  msr PSP, r1
+  ldmia	r0!, {r4-r7}
+
+  # Remove privileges!
+  //mov r0, #0x3 /* unpriv + PSP */
+  //mov r0, #0x2 /* priv + PSP */
+  //msr CONTROL, r0
+
+  # Return from exception
+  mov r0, #0
+  sub r0, r0, #3
+  mov lr, r0     /* Place 0xFFFFFFFD on LR */
+	cpsie	i
+  bx lr
+.cfi_endproc
+.size ctxtswtr, . - ctxtswtr
 
 .global __nop
 .type __nop,%function
@@ -46,6 +127,14 @@ __wfe:
 __dmb:
   push {lr}
   dmb
+  pop {pc}
+
+.global __isb
+.type __isb,%function
+.thumb_func
+__isb:
+  push {lr}
+  isb
   pop {pc}
 
 .global __getprimask
@@ -106,7 +195,7 @@ __setpsp:
   msr PSP, r0
   pop {pc}
 
-.global __setrx
+.global __getrx
 .type __getrx,%function
 .thumb_func
 __getrx:
@@ -281,3 +370,16 @@ __setrx_r15:
   mov r15, r1
 __setrx_error:
   pop {pc}
+
+.global __launch
+.type __launch,%function
+.thumb_func
+__launch:
+  push {lr}
+  msr PSP, r1
+  mov r1, #0x3
+  msr CONTROL, r1
+  isb
+  bx r0
+  /* will never return */
+  udf 0xA

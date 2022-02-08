@@ -60,7 +60,7 @@ pub fn one_time_init() {
   reset_setup();
   gpio_setup();
   uart_setup();
-  //multicore_setup();
+  //multicore_setup(); //TODO: Reenable once the scheduler works
 }
 
 #[inline(never)]
@@ -81,50 +81,65 @@ pub fn c1(schedtable : tasks::SchedTable) -> ! {
 }
 
 #[inline(never)]
-pub fn taskled() {  
-  static mut LEDST: bool = false;
-  unsafe {
-    let mut iobank0 = mcal::iobank0::Peripheral::new();
-    if LEDST {
+pub fn taskledon() {
+  loop {
+    unsafe {
+      let mut iobank0 = mcal::iobank0::Peripheral::new();
+      iobank0.force_high(PICO_DEFAULT_LED_PIN);      
+    }
+  }
+}
+
+#[inline(never)]
+pub fn taskledoff() {
+  loop {
+    unsafe {
+      let mut iobank0 = mcal::iobank0::Peripheral::new();
       iobank0.force_low(PICO_DEFAULT_LED_PIN);
     }
-    else {
-      iobank0.force_high(PICO_DEFAULT_LED_PIN);
-    }
-    LEDST = !LEDST;
-    //mcal::timer::Peripheral::delay_nops(1000000000); 
   }
 }
 
 #[inline(never)]
 pub fn tasknop() {
-  //NOP FOREVER!
-  mcal::timer::Peripheral::delay_nops(4294967295);   
+  loop {
+    mcal::timer::Peripheral::delay_nops(u32::MAX);   
+  }
 }
 
 #[inline(never)]
 pub fn taskuart() {
   unsafe {
-    let mut uart = mcal::uart::Peripheral::new(mcal::uart::Uart::Uart0);
-    //mcal::timer::Peripheral::delay_nops(10000000);
-    uart.puts("Hello, keso!\n");
+    loop {
+      let mut uart = mcal::uart::Peripheral::new(mcal::uart::Uart::Uart0);
+      uart.puts("Hello, keso!\n");
+      mcal::timer::Peripheral::delay_nops(1000);
+    }
   }
 }
 
 #[inline(never)]
 pub fn main() -> ! {
   unsafe {
+    //mcal::timer::Peripheral::delay_nops(u32::MAX);
     if mcal::sio::Peripheral::new().get_core_num() == 0 {
       c0(tasks::SchedTable { macroperiod : 1_000_000,
-                             schedpoints : &mut[(0,       tasks::Task::new("c0t0", taskled, &mut [0xCAFECAFE; 512], 512, 0)),
-                                                (500_000, tasks::Task::new("c0t1", tasknop, &mut [0xCAFECAFE; 512], 512, 0)),
-                                               ],
+                             tasks       : &mut [tasks::Task::new("c0t0", taskledon, &mut [0xCAFECAFE; 256], 256, 0), // DELETEME: 1k stack at 0x200407c0
+                                                 tasks::Task::new("c0t1", taskledoff, &mut [0xDEADBEEF; 256], 256, 0)
+                                                ],
+                             schedpoints : &[(0,       0), /* Start tasks[0] at 0 us */
+                                             (500_000, 1), /* Start tasks[1] at 0.5 s */
+                                            ],
                            });
     }
     else {
       c1(tasks::SchedTable { macroperiod : 10_000_000,
-                             schedpoints : &mut[(0,       tasks::Task::new("c1t0", taskuart, &mut [0xCAFECAFE; 512], 512, 0)),
-                                               ],
+                             tasks       : &mut [tasks::Task::new("c1t0", taskuart, &mut [0xDAD0D1D0; 256], 256, 0),
+                                                 tasks::Task::new("c1t1",  tasknop, &mut [0xBEEFFEED; 256], 256, 0)
+                                                ],
+                             schedpoints : &[(0,         0),
+                                             (5_000_000, 1),
+                                            ],
                            });
     }
   }

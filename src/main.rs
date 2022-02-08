@@ -198,6 +198,7 @@ pub fn nmi_handler() -> ! {
 #[no_mangle]
 pub static __HARD_FAULT: fn() -> ! = hard_fault_handler;
 pub fn hard_fault_handler() -> ! {
+    // User should look into CFSR 0xE000ED30
     loop {}
 }
 
@@ -223,7 +224,7 @@ pub fn usage_fault_handler() -> ! {
 }
 
 #[no_mangle]
-pub fn unhandler() {
+pub extern "C" fn unhandler() {
     loop {}
 }
 
