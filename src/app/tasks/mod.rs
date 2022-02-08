@@ -94,34 +94,33 @@ static mut C1ST: Option<(usize, usize)> = None;
 
 #[no_mangle]
 #[inline(never)]
-pub extern "C" fn alarmhandler(coreidx: u32, psp: usize, fromusermode: bool) -> usize {
+pub extern "C" fn alarmhandler(coreidx: u32, psp: usize, _fromusermode: bool) -> usize {
   unsafe {
-    // Clear the alarm first
     let mut timer = super::mcal::timer::Peripheral::new();
-    timer.clear_alarm(super::mcal::timer::AlarmId::Alarm0);
 
     let (corest, alarm) = match coreidx {
-      0 => (C0ST, super::mcal::timer::AlarmId::Alarm0),
-      1 => (C1ST, super::mcal::timer::AlarmId::Alarm1),
+      0 => (&mut C0ST, super::mcal::timer::AlarmId::Alarm0),
+      1 => (&mut C1ST, super::mcal::timer::AlarmId::Alarm1),
       _ => unreachable!(),
     };
 
+    // Clear the alarm first
+    timer.clear_alarm(alarm);
+
     if let Some((stptr, currentidx)) = corest {
       // Reborrow to deref raw ptr and get mutable reference to the sched table
-      let schedtab = &mut *(stptr as *mut SchedTable);
-      let schedtablen = schedtab.schedpoints.len();
-      let nextidx = (currentidx + 1) % schedtablen;
-      C0ST = Some((stptr, nextidx));
+      let schedtab = &mut *(*stptr as *mut SchedTable);
+      let nextidx = (*currentidx + 1) % schedtab.schedpoints.len();
 
       // Configure the next alarm
       {
         let delta = 
-        if schedtab.schedpoints[nextidx].0 > schedtab.schedpoints[currentidx].0 {
-          schedtab.schedpoints[nextidx].0 - schedtab.schedpoints[currentidx].0
-        }
-        else {
-          schedtab.macroperiod - schedtab.schedpoints[currentidx].0
-        };
+          if schedtab.schedpoints[nextidx].0 > schedtab.schedpoints[*currentidx].0 {
+            schedtab.schedpoints[nextidx].0 - schedtab.schedpoints[*currentidx].0
+          }
+          else {
+            schedtab.macroperiod - schedtab.schedpoints[*currentidx].0
+          };
 
         timer.set_alarm_relative(
           alarm,
@@ -131,15 +130,17 @@ pub extern "C" fn alarmhandler(coreidx: u32, psp: usize, fromusermode: bool) -> 
       }
       // Save the context
       {
-        schedtab.tasks[schedtab.schedpoints[currentidx].1].regs.sp = psp;
-        schedtab.tasks[schedtab.schedpoints[currentidx].1].state = TaskState::Ready;
+        schedtab.tasks[schedtab.schedpoints[*currentidx].1].regs.sp = psp;
+        schedtab.tasks[schedtab.schedpoints[*currentidx].1].state = TaskState::Ready;
       }
+
+      *currentidx = nextidx;
+
       // Run the appropiate task
       {
         schedtab.tasks[schedtab.schedpoints[nextidx].1].state = TaskState::Running;
         return schedtab.tasks[schedtab.schedpoints[nextidx].1].regs.sp;
       }
-        
     } else {
       panic!("Timer shouldn't be firing without schedule table"); // How the fuck the timer is running without
     }
@@ -166,7 +167,7 @@ impl<'a> SchedTable<'a> {
       if coreid == 0 {
         C0ST = Some(((&self as *const Self) as usize, 0));
       } else {
-        loop {} /*TODO: Enable the second core only if the 1st core is working properly*/
+        C1ST = Some(((&self as *const Self) as usize, 0)); 
       }
 
       // Reset the time just before starting the scheduler
