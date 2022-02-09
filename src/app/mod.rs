@@ -3,6 +3,8 @@ mod tasks;
 
 pub const PICO_DEFAULT_LED_PIN: usize = 25;
 
+const UART_TX_PIN: usize = 0;
+const UART_RX_PIN: usize = 1;
 
 #[inline(never)]
 fn reset_setup() {
@@ -16,8 +18,8 @@ fn reset_setup() {
 #[inline(never)]
 fn gpio_setup() {
   unsafe {
-    let mut a = mcal::padsbank0::Peripheral::new();
-    a.writeio(PICO_DEFAULT_LED_PIN, 0x56);
+    let mut pads = mcal::padsbank0::Peripheral::new();
+    pads.writeio(PICO_DEFAULT_LED_PIN, 0x56);
   }
 }
 
@@ -38,9 +40,6 @@ fn multicore_setup() {
   }
 }
 
-const UART_TX_PIN: usize = 0;
-const UART_RX_PIN: usize = 1;
-
 #[inline(never)]
 fn uart_setup() {
   unsafe {
@@ -60,7 +59,7 @@ pub fn one_time_init() {
   reset_setup();
   gpio_setup();
   uart_setup();
-  //multicore_setup();
+  multicore_setup();
 }
 
 #[inline(never)]
@@ -72,10 +71,8 @@ pub fn c0(schedtable : tasks::SchedTable) -> ! {
   schedtable.start();
 }
 
-
 #[inline(never)]
 pub fn c1(schedtable : tasks::SchedTable) -> ! {
-
   // Start scheduler in core1
   schedtable.start();
 }
@@ -113,7 +110,7 @@ pub fn taskuart_sayhello() {
     loop {
       let mut uart = mcal::uart::Peripheral::new(mcal::uart::Uart::Uart0);
       uart.puts("Hello, ");
-      mcal::timer::Peripheral::delay_nops(1000);
+      mcal::timer::Peripheral::delay_nops(10000000);
     }
   }
 }
@@ -123,8 +120,8 @@ pub fn taskuart_saykeso() {
   unsafe {
     loop {
       let mut uart = mcal::uart::Peripheral::new(mcal::uart::Uart::Uart0);
-      uart.puts("keso!\n");
-      mcal::timer::Peripheral::delay_nops(1000);
+      uart.puts("keso!\n\r");
+      mcal::timer::Peripheral::delay_nops(10000000);
     }
   }
 }
@@ -132,7 +129,6 @@ pub fn taskuart_saykeso() {
 #[inline(never)]
 pub fn main() -> ! {
   unsafe {
-    //mcal::timer::Peripheral::delay_nops(u32::MAX);
     if mcal::sio::Peripheral::new().get_core_num() == 0 {
       c0(tasks::SchedTable { macroperiod : 1_000_000,
                              tasks       : &mut [tasks::Task::new("c0t0",  taskledon, &mut [0xCAFECAFE; 256], 256, 0),

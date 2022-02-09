@@ -158,17 +158,13 @@ impl<'a> SchedTable<'a> {
     unsafe {
       let mut timer = super::mcal::timer::Peripheral::new();
       let coreid = super::mcal::sio::Peripheral::new().get_core_num();
-      let alarm: super::mcal::timer::AlarmId = match coreid {
-        0 => super::mcal::timer::AlarmId::Alarm0,
-        1 => super::mcal::timer::AlarmId::Alarm1,
+      let (corest, alarm) = match coreid {
+        0 => (&mut C0ST, super::mcal::timer::AlarmId::Alarm0),
+        1 => (&mut C1ST, super::mcal::timer::AlarmId::Alarm1),
         _ => panic!("Only two cores are supported"),
       };
 
-      if coreid == 0 {
-        C0ST = Some(((&self as *const Self) as usize, 0));
-      } else {
-        C1ST = Some(((&self as *const Self) as usize, 0)); 
-      }
+      *corest = Some(((&self as *const Self) as usize, 0));
 
       // Reset the time just before starting the scheduler
       timer.reset_time();

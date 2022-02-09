@@ -51,3 +51,6 @@ flash: cargo
 
 reset:
 	$(OPENOCD) -c "init; reset; exit"
+
+uart:
+	screen /dev/ttyACM0 115200
