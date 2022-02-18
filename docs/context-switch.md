@@ -9,9 +9,9 @@ In ARM Cortex M microprocessors, and more especifically, in the ARMv6m architect
  * Retrieves the handler address from VTOR[nb] and jumps to it
 
 The specific value of EXC_RETURN defines the situation at the moment of the interrupt, and instructs the future exception return
- * 0xFFFFFFF1 Return to Handler Mode. Exception return gets state from the Main stack. On return execution uses the Main Stack.
- * 0xFFFFFFF9 Return to Thread Mode. Exception return gets state from the Main stack. On return execution uses the Main Stack.
- * 0xFFFFFFFD Return to Thread Mode. Exception return gets state from the Process stack. On return execution uses the Process Stack.
+ * 0xFFFFFFF1 Return to Handler Mode. Exception return gets state from the MSP. On return execution uses the MSP.
+ * 0xFFFFFFF9 Return to Thread Mode. Exception return gets state from the MSP. On return execution uses the MSP.
+ * 0xFFFFFFFD Return to Thread Mode. Exception return gets state from the PSP. On return execution uses the PSP.
 
 An exception return occurs when the processor is in Handler mode and one of the following instructions loads a value of 0xFXXXXXXX into the PC:
  * POP that includes loading the PC.

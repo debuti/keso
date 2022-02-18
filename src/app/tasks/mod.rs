@@ -94,7 +94,7 @@ static mut C1ST: Option<(usize, usize)> = None;
 
 #[no_mangle]
 #[inline(never)]
-pub extern "C" fn alarmhandler(coreidx: u32, psp: usize, _fromusermode: bool) -> usize {
+pub extern "C" fn alarmhandler(coreidx: u32, sp: usize, fromusermode: bool) -> usize {
   unsafe {
     let mut timer = super::mcal::timer::Peripheral::new();
 
@@ -130,7 +130,7 @@ pub extern "C" fn alarmhandler(coreidx: u32, psp: usize, _fromusermode: bool) ->
       }
       // Save the context
       {
-        schedtab.tasks[schedtab.schedpoints[*currentidx].1].regs.sp = psp;
+        schedtab.tasks[schedtab.schedpoints[*currentidx].1].regs.sp = sp;
         schedtab.tasks[schedtab.schedpoints[*currentidx].1].state = TaskState::Ready;
       }
 

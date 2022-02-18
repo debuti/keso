@@ -24,8 +24,25 @@ PreResetTrampoline:
 ctxtswtr:
 	cpsid	i
 
-  # Save (the rest of) the context to the stack
+  # Identify if we come from kernel or user mode
+  mov r3, #0x0
+  sub r3, r3, #0xF   /* 0xFFFF_FFF1 */
+  mov r2, LR
+  sub r2, r2, r3
+
+  cmp r2, #0x0       /* Nested exception */
+  beq .              /* unimplemented!() */
+  cmp r2, #0x8       /* CPU was running kernel code */
+  bne . + 0xA
+  mov r2, #0
+  mrs r0, MSP
+  b . + 0xC
+  cmp r2, #0xC       /* CPU was running user code */
+  bne .              /* unreachable!() */
+  mov r2, #1
   mrs r0, PSP
+
+  # Save (the rest of) the context to the stack
   sub r0, #32
   stmia r0!, {r4-r7}
 	mov	r4, r8
@@ -53,21 +70,15 @@ ctxtswtr:
     SP -> |  R4   | <- Until here was pushed by us
   */
 
-  # Identify running exception from xPSR
-  mrs r0, xPSR
-  mov r1, #0xFF
-  and r0, r1
-  sub r0, #0x10 /* R0 now holds the interrupt number */
-
-  # Retrieve PSP
-  mrs r1, PSP
+  # Save SP to R0
+  mov r1, r0
   sub r1, #32
 
-  # Identify if we come from kernel or user mode
-  mov r2, #0x0
-  sub r2, r2, #3
-  mov r3, LR
-  sub r2, r2, r3
+  # Identify running exception from xPSR
+  mrs r0, xPSR
+  mov r4, #0xFF
+  and r0, r4
+  sub r0, #0x10 /* R0 now holds the interrupt number */
 
   # Call high level code to setup the next timer and return next task SP
   bl alarmhandler /* R0 will hold the new PSP value */
