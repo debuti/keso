@@ -1,5 +1,5 @@
 # keso
-Real-time operating system for RP2040 written in Rust
+Extreme real-time operating system for RP2040 written in Rust. Extreme as in if the time constrains are violated the system halts.
 
 # Environment setup
 This chapter targets Ubuntu 20.04
@@ -61,11 +61,3 @@ code --install-extension ms-vscode.cpptools
 
 # License
 This software project follows the license (CC BY-NC-SA 4.0)[https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode]
-
-
-# TODO
-* Use timer to blink a led
-* Use timers to create a primitive scheduler
-* Create the concept of task
-* Sync both cores with spinlocks/barriers, to sync the schedule tables
-* Remove unsafe blocks!!

@@ -79,20 +79,22 @@ pub fn c1(schedtable : tasks::SchedTable) -> ! {
 
 #[inline(never)]
 pub fn taskledon() {
-  loop {
-    unsafe {
-      let mut iobank0 = mcal::iobank0::Peripheral::new();
-      iobank0.force_high(PICO_DEFAULT_LED_PIN);      
+  unsafe {
+    let mut iobank0 = mcal::iobank0::Peripheral::new();
+    loop {
+      iobank0.force_high(PICO_DEFAULT_LED_PIN);
+      tasks::Task::finishjob();
     }
   }
 }
 
 #[inline(never)]
 pub fn taskledoff() {
-  loop {
-    unsafe {
-      let mut iobank0 = mcal::iobank0::Peripheral::new();
+  unsafe {
+    let mut iobank0 = mcal::iobank0::Peripheral::new();
+    loop {
       iobank0.force_low(PICO_DEFAULT_LED_PIN);
+      tasks::Task::finishjob();
     }
   }
 }
@@ -100,17 +102,18 @@ pub fn taskledoff() {
 #[inline(never)]
 pub fn tasknop() {
   loop {
-    mcal::timer::Peripheral::delay_nops(u32::MAX);   
+    mcal::timer::Peripheral::delay_nops(100000);
+    tasks::Task::finishjob();   
   }
 }
 
 #[inline(never)]
 pub fn taskuart_sayhello() {
   unsafe {
+    let mut uart = mcal::uart::Peripheral::new(mcal::uart::Uart::Uart0);
     loop {
-      let mut uart = mcal::uart::Peripheral::new(mcal::uart::Uart::Uart0);
       uart.puts("Hello, ");
-      mcal::timer::Peripheral::delay_nops(10000000);
+      tasks::Task::finishjob();
     }
   }
 }
@@ -118,10 +121,10 @@ pub fn taskuart_sayhello() {
 #[inline(never)]
 pub fn taskuart_saykeso() {
   unsafe {
+    let mut uart = mcal::uart::Peripheral::new(mcal::uart::Uart::Uart0);
     loop {
-      let mut uart = mcal::uart::Peripheral::new(mcal::uart::Uart::Uart0);
       uart.puts("keso!\n\r");
-      mcal::timer::Peripheral::delay_nops(10000000);
+      tasks::Task::finishjob();
     }
   }
 }

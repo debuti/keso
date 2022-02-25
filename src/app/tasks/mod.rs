@@ -25,6 +25,14 @@ pub struct Task<'a> {
 }
 
 impl<'a> Task<'a> {
+  pub fn finishjob() {
+    // Tell the kernel that we finished this iteration
+    unsafe {core::arch::asm!("svc #1");}
+    
+    // Wait for the scheduler here. It has to be here on userland, and it has to be exactly one instruction
+    // By using inline assembly we make sure the loop {} is not optimized out
+    unsafe {core::arch::asm!("b .");} 
+  }
   pub fn loopy() -> ! {
     loop {}
   }
@@ -43,7 +51,7 @@ impl<'a> Task<'a> {
     // Init the stack with the initial context
     stack[stacksize - 1] = 0x01000000;               // Initial XPSR: Thumb set, no exception
     stack[stacksize - 2] = body as u32 | 0x1;        // Initial PC: Task body
-    stack[stacksize - 3] = Self::loopy as u32 | 0x1; // Initial LR: Function that will be called when the task finish
+    stack[stacksize - 3] = Self::loopy as u32 | 0x1; // Initial LR: Function that will be called when the task finishes
     stack[stacksize - 4] = 0x12;                     // Initial R12
     stack[stacksize - 5] = 0x3;                      // Initial R3
     stack[stacksize - 6] = 0x2;                      // Initial R2
@@ -80,17 +88,27 @@ pub struct SchedTable<'a> {
   pub tasks: &'a mut [Task<'a>],
   pub schedpoints: &'a [(u64, usize)], // Currently only one task is enabled at each sched point
 }
-//pub struct Scheduler<'a> {
-//    pub coresched: [SchedTable<'a>; super::mcal::NUM_CORES as usize],
-//}
+
 
 extern "C" {
   #[cfg(armv6m)]
   fn ctxtswtr();
+  #[cfg(armv6m)]
+  fn svclanding();
 }
 
-static mut C0ST: Option<(usize, usize)> = None;
-static mut C1ST: Option<(usize, usize)> = None;
+//FIXME: This should be an array of proper structs 
+static mut C0ST: Option<(usize, usize, bool)> = None;
+static mut C1ST: Option<(usize, usize, bool)> = None;
+
+// pub struct CoreObj {
+//    
+// }
+
+//pub struct KernelObj<'a> {
+//    pub coresched: [SchedTable<'a>; super::mcal::NUM_CORES as usize],
+//}
+
 
 #[no_mangle]
 #[inline(never)]
@@ -107,7 +125,7 @@ pub extern "C" fn alarmhandler(coreidx: u32, sp: usize, fromusermode: bool) -> u
     // Clear the alarm first
     timer.clear_alarm(alarm);
 
-    if let Some((stptr, currentidx)) = corest {
+    if let Some((stptr, currentidx, finish)) = corest {
       // Reborrow to deref raw ptr and get mutable reference to the sched table
       let schedtab = &mut *(*stptr as *mut SchedTable);
       let nextidx = (*currentidx + 1) % schedtab.schedpoints.len();
@@ -129,11 +147,28 @@ pub extern "C" fn alarmhandler(coreidx: u32, sp: usize, fromusermode: bool) -> u
         );
       }
       // Save the context
-      {
+      if fromusermode {
         schedtab.tasks[schedtab.schedpoints[*currentidx].1].regs.sp = sp;
         schedtab.tasks[schedtab.schedpoints[*currentidx].1].state = TaskState::Ready;
+      
+        if !*finish {
+          // Oh oh the task wasnt finished :(
+  
+          let mut uart = super::mcal::uart::Peripheral::new(super::mcal::uart::Uart::Uart0);
+          match coreidx {
+            0 => uart.puts("C0 finished abruptly!\n\r"),
+            1 => uart.puts("C1 finished abruptly!\n\r"),
+
+        _ => unreachable!(),
+          };
+
+          //TODO: Use a callback to user code to signal this FatalError
+          //TODO: Also, the other cores should be notified and stopped
+          loop {}
+        }
       }
 
+      *finish = false;
       *currentidx = nextidx;
 
       // Run the appropiate task
@@ -147,12 +182,47 @@ pub extern "C" fn alarmhandler(coreidx: u32, sp: usize, fromusermode: bool) -> u
   }
 }
 
+#[no_mangle]
+#[inline(never)]
+pub extern "C" fn svchandler(syscall: u32) {
+  fn iterationend(coreid: u32) {
+    // Signal iteration end
+    unsafe {
+      let corest = match coreid {
+        0 => &mut C0ST,
+        1 => &mut C1ST,
+        _ => unreachable!(),
+      };
+
+      if let Some((stptr, currentidx, finish)) = corest {
+        let schedtab = &mut *(*stptr as *mut SchedTable);
+        schedtab.tasks[schedtab.schedpoints[*currentidx].1].state = TaskState::Waiting;
+        *finish = true;
+      }
+    }
+  }
+
+  let coreid = unsafe{super::mcal::sio::Peripheral::new().get_core_num()};
+  match syscall {
+    1 => {iterationend(coreid)},
+    _ => {panic!("Unknown syscall")},
+  }
+}
+
 impl<'a> SchedTable<'a> {
   pub fn start(self) -> ! {
     // Initialize task ids
     for (idx, task) in self.tasks.iter_mut().enumerate() {
       task.id = Some(idx);
       task.state = TaskState::Ready;
+    }
+    // Setup the svc call
+    {
+      unsafe {
+        let mut cm0p = super::mcal::cm0p::Peripheral::new();
+        let irqid = super::mcal::cm0p::IrqId::Svc;
+        cm0p.irq_set_exclusive_handler(irqid, svclanding);
+      }
     }
     // Launch the sched table
     unsafe {
@@ -164,16 +234,14 @@ impl<'a> SchedTable<'a> {
         _ => panic!("Only two cores are supported"),
       };
 
-      *corest = Some(((&self as *const Self) as usize, 0));
+      // Provide the last item so the 1st task is the schedtable entry zero
+      *corest = Some(((&self as *const Self) as usize, self.schedpoints.len() - 1, false));
 
       // Reset the time just before starting the scheduler
-      timer.reset_time();
+      if coreid == 0 { timer.reset_time(); }
       // Trigger the first alarm by hand!
       timer.set_alarm_relative(alarm, self.schedpoints[1].0 as u32, ctxtswtr);
 
-      // Setup process stack and user mode right before switching to task
-      super::mcal::intrinsics::launch(self.tasks[0].body, self.tasks[0].regs.sp + 64);
-      
       loop {} // This wont ever be used but the compiler needs to know its divergent
     }
   }

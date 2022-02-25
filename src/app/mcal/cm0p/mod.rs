@@ -8,32 +8,48 @@ pub mod defs;
 
 #[derive(Copy, Clone)]
 pub enum IrqId {
-    Timer0 = 0,  // So exception number 16
-    Timer1 = 1,
-    Timer2 = 2,
-    Timer3 = 3,
-    PwmWrap = 4,
-    UsbCtrl = 5,
-    Xip = 6,
-    Pio0_0 = 7,
-    Pio0_1 = 8,
-    Pio1_0 = 9,
-    Pio1_1 = 10,
-    Dma0 = 11,
-    Dma1 = 12,
-    IoBank0 = 13,
-    IoQspi = 14,
-    SioProc0 = 15,
-    SioProc1 = 16,
-    Clocks = 17,
-    Spi0 = 18,
-    Spi1 = 19,
-    Uart0 = 20,
-    Uart1 = 21,
-    AdcFifo = 22,
-    I2C0 = 23,
-    I2C1 = 24,
-    Rtc = 25,
+    _Reserved0 = 0,
+    Reset = 1,
+    NMI = 2,
+    HardFault = 3,
+    _Reserved4 = 4,
+    _Reserved5 = 5,
+    _Reserved6 = 6,
+    _Reserved7 = 7,
+    _Reserved8 = 8,
+    _Reserved9 = 9,
+    _Reserved10 = 10,
+    Svc = 11,
+    _Reserved12 = 12,
+    _Reserved13 = 13,
+    PendSV = 14,
+    SysTick = 15,
+    Timer0 = 16,  // RP2040 specific exceptions start here
+    Timer1 = 17,
+    Timer2 = 18,
+    Timer3 = 19,
+    PwmWrap = 20,
+    UsbCtrl = 21,
+    Xip = 22,
+    Pio0_0 = 23,
+    Pio0_1 = 24,
+    Pio1_0 = 25,
+    Pio1_1 = 26,
+    Dma0 = 27,
+    Dma1 = 28,
+    IoBank0 = 29,
+    IoQspi = 30,
+    SioProc0 = 31,
+    SioProc1 = 32,
+    Clocks = 33,
+    Spi0 = 34,
+    Spi1 = 35,
+    Uart0 = 36,
+    Uart1 = 37,
+    AdcFifo = 38,
+    I2C0 = 39,
+    I2C1 = 40,
+    Rtc = 41,
 }
 
 /**
@@ -128,13 +144,14 @@ impl Peripheral {
     #[inline(never)]
     pub fn irq_is_enabled(&self, irq: IrqId) -> bool {
         Self::check_irq_param(irq);
-        (self.nvic.iser.read() & (1 << irq as u32)) != 0
+        (self.nvic.iser.read() & (1 << (irq as u32 - 16))) != 0
     }
 
     #[inline(never)]
     pub fn irq_set_enabled(&mut self, irq: IrqId, enabled: bool) {
+//        crate::app::mcal::timer::Peripheral::delay_nops(u32::MAX);
         Self::check_irq_param(irq);
-        self.irq_set_mask_enabled(1 << irq as u32, enabled);
+        self.irq_set_mask_enabled(1 << (irq as u32 - 16), enabled);
     }
     
     #[inline(never)]
@@ -154,7 +171,7 @@ impl Peripheral {
     #[inline(never)]
     pub fn irq_set_pending(&mut self, irq: IrqId, pending: bool) {
         Self::check_irq_param(irq);
-        self.irq_set_mask_enabled(1 << irq as u32, pending);
+        self.irq_set_mask_enabled(1 << (irq as u32 - 16), pending);
     }
     
     #[inline(never)]
@@ -175,7 +192,6 @@ impl Peripheral {
             let saved = sio.spin_lock_blocking(super::sio::SpinlockID::Irq as usize);
             // update vtable (vtable_handler may be same or updated depending on cases, but we do it anyway for compactness)
             self.irq_set_vtable_handler(irq, handler);
-            //crate::app::mcal::timer::Peripheral::delay(100000000);
             super::intrinsics::dmb();
             sio.spin_unlock(super::sio::SpinlockID::Irq as usize, saved);
         }
@@ -202,7 +218,7 @@ impl Peripheral {
         unsafe {
           let vt = self.scb.vtor.read() as *mut unsafe extern "C" fn();
           let vtable = core::slice::from_raw_parts_mut(vt, 48);
-          vtable[16 + irq as usize] = handler;
+          vtable[irq as usize] = handler;
         }
     }
     

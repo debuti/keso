@@ -6,6 +6,8 @@ target = target/thumbv6m-none-eabi/debug/$(project)
 
 ELF2UF2=tools/elf2uf2
 OPENOCD=openocd -f interface/picoprobe.cfg -f target/rp2040.cfg -s tcl
+OPENOCD0=openocd -f interface/picoprobe.cfg -f target/rp2040-core0.cfg -s tcl
+OPENOCD1=openocd -f interface/picoprobe.cfg -f target/rp2040-core1.cfg -s tcl
 
 .PHONY: all
 all: bin
@@ -13,7 +15,7 @@ all: bin
 .PHONY: startuplib
 startuplib:
 	mkdir -p $(bin)
-	arm-none-eabi-as -march=armv6-m $(srcaux)/asm.s -o $(bin)/libstartup.o
+	arm-none-eabi-as -march=armv6s-m $(srcaux)/asm.s -o $(bin)/libstartup.o
 	ar crs $(bin)/thumbv6m-none-eabi.a $(bin)/libstartup.o
 
 .PHONY: cargo
@@ -39,9 +41,16 @@ debug:
 	-arm-none-eabi-gdb --command=res/debug.gdb $(target)
 	kill -9 `cat .openocd.pid` && rm .openocd.pid
 
-.PHONY: debugrunning
-debugrunning:
-	$(OPENOCD) >/dev/null 2>&1 & echo "$$!" > .openocd.pid
+.PHONY: debugrunning0
+debugrunning0:
+	$(OPENOCD0) >/dev/null 2>&1 & echo "$$!" > .openocd.pid
+	sleep 3
+	-arm-none-eabi-gdb -command=res/debugrunning.gdb $(target)
+	kill -9 `cat .openocd.pid` && rm .openocd.pid
+
+.PHONY: debugrunning1
+debugrunning1:
+	$(OPENOCD1) >/dev/null 2>&1 & echo "$$!" > .openocd.pid
 	sleep 3
 	-arm-none-eabi-gdb -command=res/debugrunning.gdb $(target)
 	kill -9 `cat .openocd.pid` && rm .openocd.pid

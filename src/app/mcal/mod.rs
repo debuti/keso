@@ -20,7 +20,7 @@ pub const MHZ: u32 = 1000000;
 
 pub const NUM_CORES: u32 = 2;
 pub const NUM_DMA_CHANNELS: u32 = 12;
-pub const NUM_IRQS: u32 = 32;
+pub const NUM_IRQS: u32 = 16 + 32;
 pub const NUM_PIOS: u32 = 2;
 pub const NUM_PIO_STATE_MACHINES: u32 = 4;
 pub const NUM_PWM_SLICES: u32 = 8;

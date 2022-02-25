@@ -11,8 +11,6 @@ extern "C" {
     fn __getcontrol() -> u32;
     fn __getpsp() -> u32;
     fn __setpsp(value:u32);
-    fn __getrx(idx:u8) -> u32;
-    fn __setrx(idx:u8, value:u32);
     fn __launch(body:u32,psp:u32);
 }
 
@@ -46,9 +44,5 @@ pub fn getcontrol() -> (bool, bool) {
 pub fn getpsp() -> usize {unsafe{__getpsp() as usize}}
 
 pub fn setpsp(value:usize) {unsafe{__setpsp(value as u32)}}
-
-pub fn getrx(idx:u8) -> u32 {unsafe{__getrx(idx) as u32}}
-
-pub fn setrx(idx:u8, value:u32) {unsafe{__setrx(idx, value as u32)}}
 
 pub fn launch(body:fn(), psp:usize) {unsafe{__launch(body as u32, psp as u32)}}
