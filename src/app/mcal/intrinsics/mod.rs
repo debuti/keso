@@ -1,28 +1,20 @@
 extern "C" {
-    fn __nop();
-    fn __sev();
-    fn __wfe();
-    fn __dmb();
-    fn __isb();
     fn __getprimask() -> u32;
     fn __disirq();
     fn __enairq(irq:u32);
     fn __setcontrol(privileged:u32, psp:u32);
     fn __getcontrol() -> u32;
-    fn __getpsp() -> u32;
-    fn __setpsp(value:u32);
-    fn __launch(body:u32,psp:u32);
 }
 
-pub fn nop() {unsafe{__nop();}}
+pub fn nop() {unsafe {core::arch::asm!("nop");}}
 
-pub fn sev() {unsafe{__sev();}}
+pub fn sev() {unsafe {core::arch::asm!("sev");}}
 
-pub fn wfe() {unsafe{__wfe();}}
+pub fn wfe() {unsafe {core::arch::asm!("wfe");}}
 
-pub fn dmb() {unsafe{__dmb();}}
+pub fn dmb() {unsafe {core::arch::asm!("dmb");}}
 
-pub fn isb() {unsafe{__isb();}}
+pub fn isb() {unsafe {core::arch::asm!("isb");}}
 
 pub fn getprimask() -> u32 {unsafe{__getprimask()}}
 
@@ -40,9 +32,3 @@ pub fn getcontrol() -> (bool, bool) {
           if control & 0x02 == 0x02 {true} else {false} )
     }
 }
-
-pub fn getpsp() -> usize {unsafe{__getpsp() as usize}}
-
-pub fn setpsp(value:usize) {unsafe{__setpsp(value as u32)}}
-
-pub fn launch(body:fn(), psp:usize) {unsafe{__launch(body as u32, psp as u32)}}

@@ -135,46 +135,6 @@ ctxtswtr:
 .cfi_endproc
 .size ctxtswtr, . - ctxtswtr
 
-.global __nop
-.type __nop,%function
-.thumb_func
-__nop:
-  push {lr}
-  nop
-  pop {pc}
-
-.global __sev
-.type __sev,%function
-.thumb_func
-__sev:
-  push {lr}
-  sev
-  pop {pc}
-
-.global __wfe
-.type __wfe,%function
-.thumb_func
-__wfe:
-  push {lr}
-  wfe
-  pop {pc}
-
-.global __dmb
-.type __dmb,%function
-.thumb_func
-__dmb:
-  push {lr}
-  dmb
-  pop {pc}
-
-.global __isb
-.type __isb,%function
-.thumb_func
-__isb:
-  push {lr}
-  isb
-  pop {pc}
-
 .global __getprimask
 .type __getprimask,%function
 .thumb_func
@@ -197,38 +157,4 @@ __disirq:
 __enairq:
   push {lr}
   msr PRIMASK, r0
-  pop {pc}
-  
-.global __setcontrol
-.type __setcontrol,%function
-.thumb_func
-__setcontrol:
-  push {r2, lr}
-  lsl r2, r1, #1
-  orr r2, r0
-  msr CONTROL, r2
-  pop {r2, pc}
-  
-.global __getcontrol
-.type __getcontrol,%function
-.thumb_func
-__getcontrol:
-  push {lr}
-  mrs r0, CONTROL
-  pop {pc}
-  
-.global __getpsp
-.type __getpsp,%function
-.thumb_func
-__getpsp:
-  push {lr}
-  mrs r0, PSP
-  pop {pc}
-  
-.global __setpsp
-.type __setpsp,%function
-.thumb_func
-__setpsp:
-  push {lr}
-  msr PSP, r0
   pop {pc}
