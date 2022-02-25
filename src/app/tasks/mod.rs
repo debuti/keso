@@ -97,47 +97,44 @@ extern "C" {
   fn svclanding();
 }
 
-//FIXME: This should be an array of proper structs 
-static mut C0ST: Option<(usize, usize, bool)> = None;
-static mut C1ST: Option<(usize, usize, bool)> = None;
+#[derive(Clone, Copy)]
+pub struct CoreObj {
+  stptr: usize,
+  currentidx: usize,
+  finish: bool,
+}
 
-// pub struct CoreObj {
-//    
-// }
-
-//pub struct KernelObj<'a> {
-//    pub coresched: [SchedTable<'a>; super::mcal::NUM_CORES as usize],
-//}
-
+static mut KERNEL_OBJ: [Option<CoreObj>; super::mcal::NUM_CORES as usize] = [None; super::mcal::NUM_CORES as usize];
 
 #[no_mangle]
 #[inline(never)]
-pub extern "C" fn alarmhandler(coreidx: u32, sp: usize, fromusermode: bool) -> usize {
+pub extern "C" fn alarmhandler(_deletethisparameter: u32, sp: usize, fromusermode: bool) -> usize {
   unsafe {
+    let coreid = super::mcal::sio::Peripheral::new().get_core_num();
     let mut timer = super::mcal::timer::Peripheral::new();
 
-    let (corest, alarm) = match coreidx {
-      0 => (&mut C0ST, super::mcal::timer::AlarmId::Alarm0),
-      1 => (&mut C1ST, super::mcal::timer::AlarmId::Alarm1),
+    let alarm = match coreid {
+      0 => super::mcal::timer::AlarmId::Alarm0,
+      1 => super::mcal::timer::AlarmId::Alarm1,
       _ => unreachable!(),
     };
 
     // Clear the alarm first
     timer.clear_alarm(alarm);
 
-    if let Some((stptr, currentidx, finish)) = corest {
+    if let Some(cobj) = &mut KERNEL_OBJ[coreid as usize] {
       // Reborrow to deref raw ptr and get mutable reference to the sched table
-      let schedtab = &mut *(*stptr as *mut SchedTable);
-      let nextidx = (*currentidx + 1) % schedtab.schedpoints.len();
+      let schedtab = &mut *(cobj.stptr as *mut SchedTable);
+      let nextidx = (cobj.currentidx + 1) % schedtab.schedpoints.len();
 
       // Configure the next alarm
       {
         let delta = 
-          if schedtab.schedpoints[nextidx].0 > schedtab.schedpoints[*currentidx].0 {
-            schedtab.schedpoints[nextidx].0 - schedtab.schedpoints[*currentidx].0
+          if schedtab.schedpoints[nextidx].0 > schedtab.schedpoints[cobj.currentidx].0 {
+            schedtab.schedpoints[nextidx].0 - schedtab.schedpoints[cobj.currentidx].0
           }
           else {
-            schedtab.macroperiod - schedtab.schedpoints[*currentidx].0
+            schedtab.macroperiod - schedtab.schedpoints[cobj.currentidx].0
           };
 
         timer.set_alarm_relative(
@@ -148,18 +145,17 @@ pub extern "C" fn alarmhandler(coreidx: u32, sp: usize, fromusermode: bool) -> u
       }
       // Save the context
       if fromusermode {
-        schedtab.tasks[schedtab.schedpoints[*currentidx].1].regs.sp = sp;
-        schedtab.tasks[schedtab.schedpoints[*currentidx].1].state = TaskState::Ready;
+        schedtab.tasks[schedtab.schedpoints[cobj.currentidx].1].regs.sp = sp;
+        schedtab.tasks[schedtab.schedpoints[cobj.currentidx].1].state = TaskState::Ready;
       
-        if !*finish {
+        if !cobj.finish {
           // Oh oh the task wasnt finished :(
   
           let mut uart = super::mcal::uart::Peripheral::new(super::mcal::uart::Uart::Uart0);
-          match coreidx {
+          match coreid {
             0 => uart.puts("C0 finished abruptly!\n\r"),
             1 => uart.puts("C1 finished abruptly!\n\r"),
-
-        _ => unreachable!(),
+            _ => unreachable!(),
           };
 
           //TODO: Use a callback to user code to signal this FatalError
@@ -168,8 +164,8 @@ pub extern "C" fn alarmhandler(coreidx: u32, sp: usize, fromusermode: bool) -> u
         }
       }
 
-      *finish = false;
-      *currentidx = nextidx;
+      cobj.finish = false;
+      cobj.currentidx = nextidx;
 
       // Run the appropiate task
       {
@@ -188,16 +184,10 @@ pub extern "C" fn svchandler(syscall: u32) {
   fn iterationend(coreid: u32) {
     // Signal iteration end
     unsafe {
-      let corest = match coreid {
-        0 => &mut C0ST,
-        1 => &mut C1ST,
-        _ => unreachable!(),
-      };
-
-      if let Some((stptr, currentidx, finish)) = corest {
-        let schedtab = &mut *(*stptr as *mut SchedTable);
-        schedtab.tasks[schedtab.schedpoints[*currentidx].1].state = TaskState::Waiting;
-        *finish = true;
+      if let Some(cobj) = &mut KERNEL_OBJ[coreid as usize] {
+        let schedtab = &mut *(cobj.stptr as *mut SchedTable);
+        schedtab.tasks[schedtab.schedpoints[cobj.currentidx].1].state = TaskState::Waiting;
+        cobj.finish = true;
       }
     }
   }
@@ -228,14 +218,16 @@ impl<'a> SchedTable<'a> {
     unsafe {
       let mut timer = super::mcal::timer::Peripheral::new();
       let coreid = super::mcal::sio::Peripheral::new().get_core_num();
-      let (corest, alarm) = match coreid {
-        0 => (&mut C0ST, super::mcal::timer::AlarmId::Alarm0),
-        1 => (&mut C1ST, super::mcal::timer::AlarmId::Alarm1),
-        _ => panic!("Only two cores are supported"),
+      let alarm = match coreid {
+        0 => super::mcal::timer::AlarmId::Alarm0,
+        1 => super::mcal::timer::AlarmId::Alarm1,
+        _ => unreachable!(),
       };
 
       // Provide the last item so the 1st task is the schedtable entry zero
-      *corest = Some(((&self as *const Self) as usize, self.schedpoints.len() - 1, false));
+      KERNEL_OBJ[coreid as usize] = Some(CoreObj{stptr:      (&self as *const Self) as usize,
+                                                currentidx: self.schedpoints.len() - 1,
+                                                finish:     false});
 
       // Reset the time just before starting the scheduler
       if coreid == 0 { timer.reset_time(); }
