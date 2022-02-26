@@ -50,7 +50,7 @@ unsafe impl Send for Peripheral {}
 
 impl Peripheral {
     #[inline(always)]
-    pub(crate) const unsafe fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             _marker: PhantomData,
         }

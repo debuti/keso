@@ -52,7 +52,7 @@ impl Peripheral {
     }
 
     #[inline(always)]
-    pub(crate) const unsafe fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             _marker: PhantomData,
         }
@@ -84,7 +84,7 @@ impl Peripheral {
         self.inte.write(t | 1<<idx as usize);
         // Set irq handler for alarm irq
         let irqid = Self::get_irq(idx);
-        unsafe {
+        {
             let mut cm0p = super::cm0p::Peripheral::new();
             cm0p.irq_set_exclusive_handler(irqid, handler);
             // Enable the alarm irq
@@ -105,7 +105,7 @@ impl Peripheral {
         let t = self.intr.read();
         self.intr.write(t | 1<<idx as usize);
         //
-        unsafe {
+        {
             let irqid = Self::get_irq(idx);
             let mut cm0p = super::cm0p::Peripheral::new();
             // Disable the alarm irq

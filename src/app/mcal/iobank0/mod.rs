@@ -51,7 +51,7 @@ unsafe impl Send for Peripheral {}
 
 impl Peripheral {
     #[inline(always)]
-    pub(crate) const unsafe fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             _marker: PhantomData,
         }
@@ -113,17 +113,16 @@ impl Peripheral {
     pub fn gpio_set_function(&mut self, gpio: usize, function: GpioFunction) {
         //invalid_params_if(GPIO, gpio >= NUM_BANK0_GPIOS);
         //invalid_params_if(GPIO, ((uint32_t)fn << IO_BANK0_GPIO0_CTRL_FUNCSEL_LSB) & ~IO_BANK0_GPIO0_CTRL_FUNCSEL_BITS);
-        unsafe {
-            // Set input enable on, output disable off
-            let mut padsbank0 = super::padsbank0::Peripheral::new();
-            {
-                let t = padsbank0.readio(gpio);
-                padsbank0.writeio(gpio, (t & !(super::padsbank0::defs::PADS_BANK0_GPIO0_IE_BITS | super::padsbank0::defs::PADS_BANK0_GPIO0_OD_BITS)) | super::padsbank0::defs::PADS_BANK0_GPIO0_IE_BITS);
-            }
-            // Zero all fields apart from fsel; we want this IO to do what the peripheral tells it.
-            // This doesn't affect e.g. pullup/pulldown, as these are in pad controls.
-            self.writeio(gpio, (function as u32) << defs::IO_BANK0_GPIO0_CTRL_FUNCSEL_LSB)
+        
+        // Set input enable on, output disable off
+        let mut padsbank0 = super::padsbank0::Peripheral::new();
+        {
+            let t = padsbank0.readio(gpio);
+            padsbank0.writeio(gpio, (t & !(super::padsbank0::defs::PADS_BANK0_GPIO0_IE_BITS | super::padsbank0::defs::PADS_BANK0_GPIO0_OD_BITS)) | super::padsbank0::defs::PADS_BANK0_GPIO0_IE_BITS);
         }
+        // Zero all fields apart from fsel; we want this IO to do what the peripheral tells it.
+        // This doesn't affect e.g. pullup/pulldown, as these are in pad controls.
+        self.writeio(gpio, (function as u32) << defs::IO_BANK0_GPIO0_CTRL_FUNCSEL_LSB)
     }
     
 }

@@ -129,7 +129,7 @@ unsafe impl Send for Peripheral {}
 
 impl Peripheral {
     #[inline(always)]
-    pub(crate) const unsafe fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             _marker: PhantomData,
         }
@@ -215,32 +215,30 @@ impl Peripheral {
 
     #[inline(never)]
     pub fn launch_core1(&mut self, entry: *const usize, sp: *const usize, vt: *const usize) {
-        unsafe {
-            let cmd_sequence = [0, 0, 1, vt as usize, sp as usize, entry as usize];
+        let cmd_sequence = [0, 0, 1, vt as usize, sp as usize, entry as usize];
 
-            let mut cm0p = super::cm0p::Peripheral::new();
+        let mut cm0p = super::cm0p::Peripheral::new();
 
-            let enabled = cm0p.irq_is_enabled(super::cm0p::IrqId::SioProc0);
-            cm0p.irq_set_enabled(super::cm0p::IrqId::SioProc0, false);
-        
-            let mut seq = 0;
-            loop {
-                let cmd = cmd_sequence[seq] as u32;
-                // we drain before sending a 0
-                if cmd == 0 {
-                    self.multicore_fifo_drain();
-                    super::intrinsics::sev(); // core 1 may be waiting for fifo space
-                }
-                self.multicore_fifo_push_blocking(cmd);
-                let response = self.multicore_fifo_pop_blocking();
-                
-                // move to next state on correct response otherwise start over
-                seq = if cmd == response {seq + 1} else {0};
-                if seq == cmd_sequence.len() {break;}
+        let enabled = cm0p.irq_is_enabled(super::cm0p::IrqId::SioProc0);
+        cm0p.irq_set_enabled(super::cm0p::IrqId::SioProc0, false);
+    
+        let mut seq = 0;
+        loop {
+            let cmd = cmd_sequence[seq] as u32;
+            // we drain before sending a 0
+            if cmd == 0 {
+                self.multicore_fifo_drain();
+                super::intrinsics::sev(); // core 1 may be waiting for fifo space
             }
-        
-            cm0p.irq_set_enabled(super::cm0p::IrqId::SioProc0, enabled);
+            self.multicore_fifo_push_blocking(cmd);
+            let response = self.multicore_fifo_pop_blocking();
+            
+            // move to next state on correct response otherwise start over
+            seq = if cmd == response {seq + 1} else {0};
+            if seq == cmd_sequence.len() {break;}
         }
+    
+        cm0p.irq_set_enabled(super::cm0p::IrqId::SioProc0, enabled);
     }
     
     #[inline(never)]

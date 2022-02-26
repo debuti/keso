@@ -192,7 +192,7 @@ pub extern "C" fn svchandler(syscall: u32) {
     }
   }
 
-  let coreid = unsafe{super::mcal::sio::Peripheral::new().get_core_num()};
+  let coreid = super::mcal::sio::Peripheral::new().get_core_num();
   match syscall {
     1 => {iterationend(coreid)},
     _ => {panic!("Unknown syscall")},
@@ -208,11 +208,9 @@ impl<'a> SchedTable<'a> {
     }
     // Setup the svc call
     {
-      unsafe {
-        let mut cm0p = super::mcal::cm0p::Peripheral::new();
-        let irqid = super::mcal::cm0p::IrqId::Svc;
-        cm0p.irq_set_exclusive_handler(irqid, svclanding);
-      }
+      let mut cm0p = super::mcal::cm0p::Peripheral::new();
+      let irqid = super::mcal::cm0p::IrqId::Svc;
+      cm0p.irq_set_exclusive_handler(irqid, svclanding);
     }
     // Launch the sched table
     unsafe {

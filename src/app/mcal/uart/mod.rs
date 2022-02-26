@@ -55,7 +55,7 @@ unsafe impl Send for Peripheral {}
 
 impl Peripheral {
     #[inline(always)]
-    pub(crate) const unsafe fn new(sel: Uart) -> Self {
+    pub(crate) const fn new(sel: Uart) -> Self {
         Self {
             _marker: PhantomData,
             sel: sel,
@@ -67,7 +67,7 @@ impl Peripheral {
 
     #[inline(never)]
     pub fn uart_init(&mut self, baudrate:u32) -> Result<u32,()> {
-        unsafe {
+        {
             let mut clks = super::clocks::Peripheral::new();
 
             if clks.clock_get_hz(super::clocks::ClockIndex::Peri) == 0 {return Err(());}
@@ -98,23 +98,19 @@ impl Peripheral {
 
     #[inline(never)]
     pub fn uart_reset(&mut self) {
-        unsafe {
-            let mut resets = super::resets::Peripheral::new();
-            match &self.sel {
-                Uart::Uart0 => resets.disable(super::resets::ResetDevice::Uart0),
-                Uart::Uart1 => resets.disable(super::resets::ResetDevice::Uart1),
-            }
+        let mut resets = super::resets::Peripheral::new();
+        match &self.sel {
+            Uart::Uart0 => resets.disable(super::resets::ResetDevice::Uart0),
+            Uart::Uart1 => resets.disable(super::resets::ResetDevice::Uart1),
         }
     }
     
     #[inline(never)]
     pub fn uart_unreset(&mut self) {
-        unsafe {
-            let mut resets = super::resets::Peripheral::new();
-            match &self.sel {
-                Uart::Uart0 => resets.enable(super::resets::ResetDevice::Uart0),
-                Uart::Uart1 => resets.enable(super::resets::ResetDevice::Uart1),
-            }
+        let mut resets = super::resets::Peripheral::new();
+        match &self.sel {
+            Uart::Uart0 => resets.enable(super::resets::ResetDevice::Uart0),
+            Uart::Uart1 => resets.enable(super::resets::ResetDevice::Uart1),
         }
     }
 
@@ -138,32 +134,30 @@ impl Peripheral {
     pub fn uart_set_baudrate(&mut self, baudrate: u32) -> u32 {
         assert_eq!(baudrate == 0, false); 
 
-        unsafe {
-            let mut clks = super::clocks::Peripheral::new();
-            let baud_rate_div: u32 = 8 * clks.clock_get_hz(super::clocks::ClockIndex::Peri) / baudrate;
-            let mut baud_ibrd: u32 = baud_rate_div >> 7;
-            let mut baud_fbrd: u32 = ((baud_rate_div & 0x7f) + 1) / 2;
+        let mut clks = super::clocks::Peripheral::new();
+        let baud_rate_div: u32 = 8 * clks.clock_get_hz(super::clocks::ClockIndex::Peri) / baudrate;
+        let mut baud_ibrd: u32 = baud_rate_div >> 7;
+        let mut baud_fbrd: u32 = ((baud_rate_div & 0x7f) + 1) / 2;
 
-            if baud_ibrd == 0 {
-                baud_ibrd = 1;
-                baud_fbrd = 0;
-            } else if baud_ibrd >= 65535 {
-                baud_ibrd = 65535;
-                baud_fbrd = 0;
-            }
-      
-            // Load PL011's baud divisor registers
-            self.ibrd.write(baud_ibrd);
-            self.fbrd.write(baud_fbrd);
-      
-            // PL011 needs a (dummy) line control register write to latch in the
-            // divisors. We don't want to actually change LCR contents here.
-            let t = self.lcr_h.read(); 
-            self.lcr_h.write(t);
-        
-            // See datasheet
-            (4 * clks.clock_get_hz(super::clocks::ClockIndex::Peri)) / (64 * baud_ibrd + baud_fbrd)
+        if baud_ibrd == 0 {
+            baud_ibrd = 1;
+            baud_fbrd = 0;
+        } else if baud_ibrd >= 65535 {
+            baud_ibrd = 65535;
+            baud_fbrd = 0;
         }
+    
+        // Load PL011's baud divisor registers
+        self.ibrd.write(baud_ibrd);
+        self.fbrd.write(baud_fbrd);
+    
+        // PL011 needs a (dummy) line control register write to latch in the
+        // divisors. We don't want to actually change LCR contents here.
+        let t = self.lcr_h.read(); 
+        self.lcr_h.write(t);
+    
+        // See datasheet
+        (4 * clks.clock_get_hz(super::clocks::ClockIndex::Peri)) / (64 * baud_ibrd + baud_fbrd)
     }
 
     #[inline(never)]

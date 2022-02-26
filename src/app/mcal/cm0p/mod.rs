@@ -129,7 +129,7 @@ unsafe impl Send for Peripheral {}
 
 impl Peripheral {
     #[inline(always)]
-    pub(crate) const unsafe fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             _marker: PhantomData,
         }
@@ -187,14 +187,12 @@ impl Peripheral {
     #[inline(never)]
     pub fn irq_set_exclusive_handler(&mut self, irq: IrqId, handler: unsafe extern "C" fn()) {
         Self::check_irq_param(irq);
-        unsafe {
-            let mut sio = super::sio::Peripheral::new();
-            let saved = sio.spin_lock_blocking(super::sio::SpinlockID::Irq as usize);
-            // update vtable (vtable_handler may be same or updated depending on cases, but we do it anyway for compactness)
-            self.irq_set_vtable_handler(irq, handler);
-            super::intrinsics::dmb();
-            sio.spin_unlock(super::sio::SpinlockID::Irq as usize, saved);
-        }
+        let mut sio = super::sio::Peripheral::new();
+        let saved = sio.spin_lock_blocking(super::sio::SpinlockID::Irq as usize);
+        // update vtable (vtable_handler may be same or updated depending on cases, but we do it anyway for compactness)
+        self.irq_set_vtable_handler(irq, handler);
+        super::intrinsics::dmb();
+        sio.spin_unlock(super::sio::SpinlockID::Irq as usize, saved);
     }
 
     #[inline(never)]
