@@ -7,8 +7,6 @@ MEMORY
     STACK1(rwx)    : ORIGIN = 0x20041000, LENGTH = 4k
 }
 
-/*EXTERN(__RESET_VECTOR);*/
-
 SECTIONS
 {
   PROVIDE(_stack0_start = ORIGIN(STACK0) + LENGTH(STACK0));
@@ -31,20 +29,11 @@ SECTIONS
   .vector_table_0 :
   {
     LONG(_stack0_start);                /* Initial Stack Pointer */
-    KEEP(*(.vector_table.resetv));     /* Reset vector */
-    __assert_reset_vector_0 = .;
-    KEEP(*(.vector_table.nmi));
-    KEEP(*(.vector_table.hard_fault));
-    KEEP(*(.vector_table.mem_manage));
-    KEEP(*(.vector_table.bus_fault));
-    KEEP(*(.vector_table.usage_fault));
+    KEEP(*(.vt0));  
 
     /* Placeholder for other unused interrupts in the vector table. */
     . = ADDR(.vector_table_0) + (48*4);
   } > RAM AT > FLASH
-
-  ASSERT(__assert_reset_vector_0 == ADDR(.vector_table_0) + 0x8,
-         "ERROR: the reset vector 0 is missing")
 
   PROVIDE(_vector_table_0 = ADDR(.vector_table_0));
   PROVIDE(_reset_0 = ADDR(.vector_table_0) + 0x4);
@@ -52,9 +41,9 @@ SECTIONS
   /* ### Vector table for core 1 */
   .vector_table_1 :
   {
-    LONG(_stack1_start);          
+    LONG(_stack1_start);
+    KEEP(*(.vt1));  
 
-    /* Vector table for core 1 will be populated by core 0 before launching it */
     . = ADDR(.vector_table_1) + (48*4);
   } > RAM AT > FLASH
 
@@ -67,8 +56,8 @@ SECTIONS
   /* ### .text */
   .text __stext :
   {
-    *(.PreResetTrampoline);
     *(.Reset);
+    *(.text.isrs);
     *(.text .text.*);
 
     . = ALIGN(4);

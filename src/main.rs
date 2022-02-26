@@ -21,27 +21,11 @@ fn panic(_info: &PanicInfo) -> ! {
 pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER;
 
 
-// 1 Reset
-// 2 NMI
-// 3 HardFault
-// 4 MemManage
-// 5 BusFault
-// 6 UsageFault
-// 7-10 Reserved
-// 11 SVCall
-// 12 DebugMonitor
-// 13 Reserved
-// 14 PendSV
-// 15 SysTick
 extern "C" {
     #[cfg(armv6m)]
-    fn PreResetTrampoline() -> !;
+    fn resetlanding();
 }
 
-#[link_section = ".vector_table.resetv"]
-#[no_mangle]
-#[cfg(armv6m)]
-pub static __RESET: unsafe extern "C" fn() -> ! = PreResetTrampoline;
 
 #[link_section = ".Reset"]
 #[no_mangle]
@@ -49,18 +33,15 @@ pub static __RESET: unsafe extern "C" fn() -> ! = PreResetTrampoline;
 pub fn reset_handler() -> ! {
     extern "C" {
         // These symbols come from `memory.ld`
-        static mut __sbss: u32; // Start of .bss section
-        static mut __ebss: u32; // End of .bss section
+        static mut __sbss: u32;  // Start of .bss section
+        static mut __ebss: u32;  // End of .bss section
         static mut __sdata: u32; // Start of .data section
         static mut __edata: u32; // End of .data section
-        static __sidata: u32; // Start of .rodata section
-        static mut _vector_table_0: u32; // Start of vector table core0
-        static mut _vector_table_1: u32; // Start of vector table core1
+        static __sidata: u32;    // Start of .rodata section
     }
 
     unsafe {
-      let sio = app::mcal::sio::Peripheral::new();
-      if sio.get_core_num() == 0 {
+      if app::mcal::sio::Peripheral::new().get_core_num() == 0 {
         // Initialize (Zero) BSS
         /* unsafe */ {
             let mut sbss: *mut u32 = &mut __sbss;
@@ -84,20 +65,7 @@ pub fn reset_handler() -> ! {
                 sidata = sidata.offset(1);
             }
         }
-    
-        // Setup vector table for core 1
-        /* unsafe */ {
-            let mut ptr0: *mut u32 = &mut _vector_table_0;
-            let end: *mut u32 = &mut _vector_table_1;
-            let mut ptr1: *mut u32 = &mut _vector_table_1;
-    
-            while ptr0 < end {
-                ptr0 = ptr0.offset(1);
-                ptr1 = ptr1.offset(1);
-                write_volatile(ptr1, read(ptr0));
-            }
-        }
-    
+        
         // Set clocking
         clocks_init();
       }
@@ -187,44 +155,132 @@ fn clocks_init() {
     }
 }
 
-#[link_section = ".vector_table.nmi"]
 #[no_mangle]
-pub static __NMI: fn() -> ! = nmi_handler;
-pub fn nmi_handler() -> ! {
+pub extern "C" fn nmi_handler() {
     loop {}
 }
 
-#[link_section = ".vector_table.hard_fault"]
 #[no_mangle]
-pub static __HARD_FAULT: fn() -> ! = hard_fault_handler;
-pub fn hard_fault_handler() -> ! {
+pub extern "C" fn hard_fault_handler() {
     // User should look into CFSR 0xE000ED30
     loop {}
 }
 
-#[link_section = ".vector_table.mem_manage"]
 #[no_mangle]
-pub static __MEM_MANAGE: fn() -> ! = mem_manage_handler;
-pub fn mem_manage_handler() -> ! {
+pub extern "C" fn nohandler() {
     loop {}
 }
 
-#[link_section = ".vector_table.bus_fault"]
-#[no_mangle]
-pub static __BUS_FAULT: fn() -> ! = bus_fault_handler;
-pub fn bus_fault_handler() -> ! {
-    loop {}
+
+pub union ISR {
+    _handler: unsafe extern "C" fn(),
+    _unused: u32,
 }
 
-#[link_section = ".vector_table.usage_fault"]
+#[link_section = ".vt0"]
 #[no_mangle]
-pub static __USAGE_FAULT: fn() -> ! = usage_fault_handler;
-pub fn usage_fault_handler() -> ! {
-    loop {}
-}
+pub static __ISRs_C0: [ISR; 47] = [ /* Idx zero is reserved to be populated by the linker */
+    /* CM0+ specific */
+    ISR { _handler: resetlanding       }, /* Reset */
+    ISR { _handler: nmi_handler        }, /* NMI */
+    ISR { _handler: hard_fault_handler }, /* HardFault */
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _handler: nohandler          }, /* SVCall */
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _handler: nohandler          }, /* PendSV */
+    ISR { _handler: nohandler          }, /* SysTick */
+    /* RP2040 specific */
+    ISR { _handler: nohandler          }, /* TIMER_IRQ_0 */
+    ISR { _handler: nohandler          }, /* TIMER_IRQ_1 */
+    ISR { _handler: nohandler          }, /* TIMER_IRQ_2 */
+    ISR { _handler: nohandler          }, /* TIMER_IRQ_3 */
+    ISR { _handler: nohandler          }, /* PWM_IRQ_WRAP */
+    ISR { _handler: nohandler          }, /* USBCTRL_IRQ */
+    ISR { _handler: nohandler          }, /* XIP_IRQ */
+    ISR { _handler: nohandler          }, /* PIO0_IRQ_0 */
+    ISR { _handler: nohandler          }, /* PIO0_IRQ_1 */
+    ISR { _handler: nohandler          }, /* PIO1_IRQ_0 */
+    ISR { _handler: nohandler          }, /* PIO1_IRQ_1 */
+    ISR { _handler: nohandler          }, /* DMA_IRQ_0 */
+    ISR { _handler: nohandler          }, /* DMA_IRQ_1 */
+    ISR { _handler: nohandler          }, /* IO_IRQ_BANK0 */
+    ISR { _handler: nohandler          }, /* IO_IRQ_QSPI */
+    ISR { _handler: nohandler          }, /* SIO_IRQ_PROC0 */
+    ISR { _handler: nohandler          }, /* SIO_IRQ_PROC1 */
+    ISR { _handler: nohandler          }, /* CLOCKS_IRQ */
+    ISR { _handler: nohandler          }, /* SPI0_IRQ */
+    ISR { _handler: nohandler          }, /* SPI1_IRQ */
+    ISR { _handler: nohandler          }, /* UART0_IRQ */
+    ISR { _handler: nohandler          }, /* UART1_IRQ */
+    ISR { _handler: nohandler          }, /* ADC_IRQ_FIFO */
+    ISR { _handler: nohandler          }, /* I2C0_IRQ */
+    ISR { _handler: nohandler          }, /* I2C1_IRQ */
+    ISR { _handler: nohandler          }, /* RTC_IRQ */
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _unused: 0xFFFFFF00 },
+];
 
+#[link_section = ".vt1"]
 #[no_mangle]
-pub extern "C" fn unhandler() {
-    loop {}
-}
-
+pub static __ISRs_C1: [ISR; 47] = [ /* Idx zero is reserved to be populated by the linker */
+    /* CM0+ specific */
+    ISR { _handler: resetlanding       }, /* Reset */
+    ISR { _handler: nmi_handler        }, /* NMI */
+    ISR { _handler: hard_fault_handler }, /* HardFault */
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _handler: nohandler          }, /* SVCall */
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _handler: nohandler          }, /* PendSV */
+    ISR { _handler: nohandler          }, /* SysTick */
+    /* RP2040 specific */
+    ISR { _handler: nohandler          }, /* TIMER_IRQ_0 */
+    ISR { _handler: nohandler          }, /* TIMER_IRQ_1 */
+    ISR { _handler: nohandler          }, /* TIMER_IRQ_2 */
+    ISR { _handler: nohandler          }, /* TIMER_IRQ_3 */
+    ISR { _handler: nohandler          }, /* PWM_IRQ_WRAP */
+    ISR { _handler: nohandler          }, /* USBCTRL_IRQ */
+    ISR { _handler: nohandler          }, /* XIP_IRQ */
+    ISR { _handler: nohandler          }, /* PIO0_IRQ_0 */
+    ISR { _handler: nohandler          }, /* PIO0_IRQ_1 */
+    ISR { _handler: nohandler          }, /* PIO1_IRQ_0 */
+    ISR { _handler: nohandler          }, /* PIO1_IRQ_1 */
+    ISR { _handler: nohandler          }, /* DMA_IRQ_0 */
+    ISR { _handler: nohandler          }, /* DMA_IRQ_1 */
+    ISR { _handler: nohandler          }, /* IO_IRQ_BANK0 */
+    ISR { _handler: nohandler          }, /* IO_IRQ_QSPI */
+    ISR { _handler: nohandler          }, /* SIO_IRQ_PROC0 */
+    ISR { _handler: nohandler          }, /* SIO_IRQ_PROC1 */
+    ISR { _handler: nohandler          }, /* CLOCKS_IRQ */
+    ISR { _handler: nohandler          }, /* SPI0_IRQ */
+    ISR { _handler: nohandler          }, /* SPI1_IRQ */
+    ISR { _handler: nohandler          }, /* UART0_IRQ */
+    ISR { _handler: nohandler          }, /* UART1_IRQ */
+    ISR { _handler: nohandler          }, /* ADC_IRQ_FIFO */
+    ISR { _handler: nohandler          }, /* I2C0_IRQ */
+    ISR { _handler: nohandler          }, /* I2C1_IRQ */
+    ISR { _handler: nohandler          }, /* RTC_IRQ */
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _unused: 0 },
+    ISR { _unused: 0xFFFFFF01 },
+];

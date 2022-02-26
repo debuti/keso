@@ -2,20 +2,20 @@
 
 # ARMv6-M leaves LR in an unknown state on Reset
 # this trampoline sets LR before it's pushed onto the stack by Reset
-.section .PreResetTrampoline, "ax"
+.section .text.isrs, "ax"
 
-.global PreResetTrampoline
-.type PreResetTrampoline,%function
+.global resetlanding
+.type resetlanding,%function
 .thumb_func
 .cfi_startproc
-PreResetTrampoline:
+resetlanding:
   # set LR to the initial value used by the ARMv7-M (0xFFFF_FFFF)
   mov r0, #0
   sub r0, #1
   mov lr, r0
   b reset_handler
 .cfi_endproc
-.size PreResetTrampoline, . - PreResetTrampoline
+.size resetlanding, . - resetlanding
 
 .global svclanding
 .type svclanding,%function

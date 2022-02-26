@@ -10,7 +10,7 @@ OPENOCD0=openocd -f interface/picoprobe.cfg -f target/rp2040-core0.cfg -s tcl
 OPENOCD1=openocd -f interface/picoprobe.cfg -f target/rp2040-core1.cfg -s tcl
 
 .PHONY: all
-all: bin
+all: bin objdump-disassembly objdump-hexdump
 
 .PHONY: startuplib
 startuplib:
@@ -55,11 +55,23 @@ debugrunning1:
 	-arm-none-eabi-gdb -command=res/debugrunning.gdb $(target)
 	kill -9 `cat .openocd.pid` && rm .openocd.pid
 
+.PHONY: flash
 flash: cargo
 	$(OPENOCD) -c "init; targets rp2040.core0; program $(target); reset; exit"
 
+.PHONY: reset
 reset:
 	$(OPENOCD) -c "init; reset; exit"
 
+.PHONY: uart
 uart:
 	screen /dev/ttyACM0 115200
+
+.PHONY: objdump-disassembly
+objdump-disassembly:
+	-arm-none-eabi-objdump -d $(target) > $(target).dis
+
+.PHONY: objdump-hexdump
+objdump-hexdump:
+	-arm-none-eabi-objdump -s $(target) > $(target).dump
+

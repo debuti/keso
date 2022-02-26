@@ -199,7 +199,7 @@ impl Peripheral {
 
     #[inline(never)]
     pub fn irq_reset_handler(&mut self, irq: IrqId) {
-        self.irq_set_exclusive_handler(irq, crate::unhandler);
+        self.irq_set_exclusive_handler(irq, crate::nohandler);
     }
 
     #[inline(never)]

@@ -22,6 +22,7 @@ done
 
 
 ### Rust
+
 ```
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rustup.sh
 bash rustup.sh -y
@@ -31,6 +32,10 @@ source $HOME/.cargo/env
 rustup target add thumbv6m-none-eabi
 cargo install cargo-binutils
 ```
+
+#### Minimum Supported Rust Version (MSRV)
+
+This crate is guaranteed to compile on stable Rust 1.42 and up. It might compile with older versions but that may change in any new patch release.
 
 
 ## Dev
