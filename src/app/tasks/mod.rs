@@ -17,14 +17,14 @@ pub struct Task<'a> {
   pub regs: Registers,
   pub id: Option<TaskId>,
   pub name: &'static str,
-  pub body: fn(),
+  pub body: fn() -> !,
   pub stack: &'a mut [u32],
   pub stacksize: usize,
   pub state: TaskState,
-  pub priority: u32, //Higher is more prioritary
 }
 
 impl<'a> Task<'a> {
+  pub const STACK_CANARY: u32 = 0xCACAC0C0;
   pub fn finishjob() {
     // Tell the kernel that we finished this iteration
     unsafe {core::arch::asm!("svc #1");}
@@ -38,20 +38,22 @@ impl<'a> Task<'a> {
   }
   pub fn new(
     name: &'static str,
-    body: fn(),
+    body: fn() -> !,
     stack: &'a mut [u32],
     stacksize: usize,
-    priority: u32,
   ) -> Self {
-    // Check the alignment
-    if stacksize % 4 != 0 {
+    // Check the alignment and minimum size
+    if stacksize % 4 != 0 || stacksize < 32 {
       panic!("Stack sizes need to be aligned to 4")
     }
+
+    // Set up the stack canary
+    stack[0] = Self::STACK_CANARY;
 
     // Init the stack with the initial context
     stack[stacksize - 1] = 0x01000000;               // Initial XPSR: Thumb set, no exception
     stack[stacksize - 2] = body as u32 | 0x1;        // Initial PC: Task body
-    stack[stacksize - 3] = Self::loopy as u32 | 0x1; // Initial LR: Function that will be called when the task finishes
+    stack[stacksize - 3] = Self::loopy as u32 | 0x1; // Initial LR: Function that will be called when the task finishes (it shouldnt)
     stack[stacksize - 4] = 0x12;                     // Initial R12
     stack[stacksize - 5] = 0x3;                      // Initial R3
     stack[stacksize - 6] = 0x2;                      // Initial R2
@@ -77,7 +79,6 @@ impl<'a> Task<'a> {
       stack: stack,
       stacksize: stacksize,
       state: TaskState::Waiting,
-      priority: priority,
     }
   }
 }
@@ -86,7 +87,7 @@ impl<'a> Task<'a> {
 pub struct SchedTable<'a> {
   pub macroperiod: u64,                // in us
   pub tasks: &'a mut [Task<'a>],
-  pub schedpoints: &'a [(u64, usize)], // Currently only one task is enabled at each sched point
+  pub schedpoints: &'a [(u64, TaskId)], // Currently only one task is enabled at each sched point
 }
 
 
@@ -145,11 +146,24 @@ pub extern "C" fn alarmhandler(sp: usize, fromusermode: bool) -> usize {
       }
       // Save the context
       if fromusermode {
+      
+        // Check the stack canary
+        {
+          if schedtab.tasks[schedtab.schedpoints[cobj.currentidx].1].stack[0] != Task::STACK_CANARY 
+          {
+            super::mcal::uart::Peripheral::new(super::mcal::uart::Uart::Uart0).puts("Task stack overflow!\n\r");
+
+            //TODO: Use a callback to user code to signal this FatalError
+            //TODO: Also, the other cores should be notified and stopped
+            loop {}
+          }
+        }
+
         schedtab.tasks[schedtab.schedpoints[cobj.currentidx].1].regs.sp = sp;
         schedtab.tasks[schedtab.schedpoints[cobj.currentidx].1].state = TaskState::Ready;
       
         if !cobj.finish {
-          // Oh oh the task wasnt finished :(
+          // Oh oh the task wasnt finished on time :(
   
           let mut uart = super::mcal::uart::Peripheral::new(super::mcal::uart::Uart::Uart0);
           match coreid {

@@ -192,7 +192,7 @@ impl Peripheral {
         }
       }
     //#endif
-        self.putc_raw(c);
+      self.putc_raw(c);
     }
 
     #[inline(never)]

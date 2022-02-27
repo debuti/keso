@@ -115,9 +115,9 @@ ctxtswtr:
   ldmia	r0!, {r4-r7}
 
   # Remove privileges!
-  //mov r0, #0x3 /* unpriv + PSP */
+  mov r0, #0x3 /* unpriv + PSP */
   //mov r0, #0x2 /* priv + PSP */
-  //msr CONTROL, r0
+  msr CONTROL, r0
 
   # Return from exception
   mov r0, #0

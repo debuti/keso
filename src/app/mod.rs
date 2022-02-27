@@ -72,7 +72,7 @@ pub fn c1(schedtable : tasks::SchedTable) -> ! {
 }
 
 #[inline(never)]
-pub fn taskledon() {
+pub fn taskledon() -> ! {
   let mut iobank0 = mcal::iobank0::Peripheral::new();
   loop {
     iobank0.force_high(PICO_DEFAULT_LED_PIN);
@@ -81,7 +81,7 @@ pub fn taskledon() {
 }
 
 #[inline(never)]
-pub fn taskledoff() {
+pub fn taskledoff() -> ! {
   let mut iobank0 = mcal::iobank0::Peripheral::new();
   loop {
     iobank0.force_low(PICO_DEFAULT_LED_PIN);
@@ -90,15 +90,16 @@ pub fn taskledoff() {
 }
 
 #[inline(never)]
-pub fn tasknop() {
+pub fn tasknop() -> ! {
   loop {
     mcal::timer::Peripheral::delay_nops(100000);
     tasks::Task::finishjob();   
   }
 }
 
+
 #[inline(never)]
-pub fn taskuart_sayhello() {
+pub fn taskuart_sayhello() -> ! {
   let mut uart = mcal::uart::Peripheral::new(mcal::uart::Uart::Uart0);
   loop {
     uart.puts("Hello, ");
@@ -107,7 +108,7 @@ pub fn taskuart_sayhello() {
 }
 
 #[inline(never)]
-pub fn taskuart_saykeso() {
+pub fn taskuart_saykeso() -> ! {
   let mut uart = mcal::uart::Peripheral::new(mcal::uart::Uart::Uart0);
   loop {
     uart.puts("keso!\n\r");
@@ -119,24 +120,24 @@ pub fn taskuart_saykeso() {
 pub fn main() -> ! {
   if mcal::sio::Peripheral::new().get_core_num() == 0 {
     c0(tasks::SchedTable { macroperiod : 1_000_000,
-                            tasks       : &mut [tasks::Task::new("c0t0",  taskledon, &mut [0xCAFECAFE; 256], 256, 0),
-                                                tasks::Task::new("c0t1", taskledoff, &mut [0xDEADBEEF; 256], 256, 0),
+                           tasks       : &mut [tasks::Task::new("c0t0",  taskledon, &mut [0xCAFECAFE; 256], 256),
+                                               tasks::Task::new("c0t1", taskledoff, &mut [0xDEADBEEF; 256], 256),
                                               ],
-                            schedpoints : &[(0,       0), /* Start tasks[0] at 0 us */
-                                            (500_000, 1), /* Start tasks[1] at 0.5 s */
+                           schedpoints : &[(0,       0), /* Start tasks[0] at 0 us */
+                                           (500_000, 1), /* Start tasks[1] at 0.5 s */
                                           ],
                           });
   }
   else {
     c1(tasks::SchedTable { macroperiod : 10_000_000,
-                            tasks       : &mut [tasks::Task::new("c1t0", taskuart_sayhello, &mut [0xDAD0D1D0; 256], 256, 0),
-                                                tasks::Task::new("c1t1",           tasknop, &mut [0xBEEFFEED; 256], 256, 0),
-                                                tasks::Task::new("c1t2",  taskuart_saykeso, &mut [0xc0c0c4c4; 256], 256, 0),
+                           tasks       : &mut [tasks::Task::new("c1t0", taskuart_sayhello, &mut [0xDAD0D1D0; 256], 256),
+                                               tasks::Task::new("c1t1",           tasknop, &mut [0xBEEFFEED; 256], 256),
+                                               tasks::Task::new("c1t2",  taskuart_saykeso, &mut [0xc0c0c4fe; 32], 32),
                                               ],
-                            schedpoints : &[(0,         0),
-                                            (1_000_000, 1),
-                                            (5_000_000, 2),
-                                            (6_000_000, 1),
+                           schedpoints : &[(0,         0),
+                                           (1_000_000, 1),
+                                           (5_000_000, 2),
+                                           (6_000_000, 1),
                                           ],
                           });
   }
