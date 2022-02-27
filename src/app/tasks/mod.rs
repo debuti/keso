@@ -108,8 +108,7 @@ static mut KERNEL_OBJ: [Option<CoreObj>; super::mcal::NUM_CORES as usize] = [Non
 
 #[no_mangle]
 #[inline(never)]
-pub extern "C" fn alarmhandler(_deletethisparameter: u32, sp: usize, fromusermode: bool) -> usize {
-  unsafe {
+pub extern "C" fn alarmhandler(sp: usize, fromusermode: bool) -> usize {
     let coreid = super::mcal::sio::Peripheral::new().get_core_num();
     let mut timer = super::mcal::timer::Peripheral::new();
 
@@ -122,6 +121,7 @@ pub extern "C" fn alarmhandler(_deletethisparameter: u32, sp: usize, fromusermod
     // Clear the alarm first
     timer.clear_alarm(alarm);
 
+  unsafe {
     if let Some(cobj) = &mut KERNEL_OBJ[coreid as usize] {
       // Reborrow to deref raw ptr and get mutable reference to the sched table
       let schedtab = &mut *(cobj.stptr as *mut SchedTable);

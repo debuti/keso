@@ -52,12 +52,12 @@ ctxtswtr:
   beq .              /* unimplemented!() */
   cmp r2, #0x8       /* CPU was running kernel code */
   bne . + 0xA
-  mov r2, #0
+  mov r1, #0
   mrs r0, MSP
   b . + 0xC
   cmp r2, #0xC       /* CPU was running user code */
   bne .              /* unreachable!() */
-  mov r2, #1
+  mov r1, #1
   mrs r0, PSP
 
   # Advance the stacked PC here:
@@ -65,9 +65,9 @@ ctxtswtr:
   #   * if the task didnt finish there is no problem, the execution will halt shortly after, in the ctxtswtr
   #   * if the task did finish great, thats what we want
   # * If MSP the flow will never return to it so no problem (but if it passes somehow, Rust has prepared a panic because SchedTable::start is divergent)
-  ldr r1, [r0, #24]  /* Indirect to PC */
-  add r1, #2
-  str r1, [r0, #24]
+  ldr r2, [r0, #24]  /* Indirect to PC */
+  add r2, #2
+  str r2, [r0, #24]
 
   # Save (the rest of) the context to the stack
   sub r0, #32
@@ -98,14 +98,7 @@ ctxtswtr:
   */
 
   # Save SP to R0
-  mov r1, r0
-  sub r1, #32
-
-  # Identify running exception from xPSR
-  mrs r0, xPSR
-  mov r4, #0xFF
-  and r0, r4
-  sub r0, #0x10 /* R0 now holds the interrupt number */
+  sub r0, #32
 
   # Call high level code to setup the next timer and return next task SP
   bl alarmhandler /* R0 will hold the new PSP value */
