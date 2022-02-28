@@ -25,6 +25,10 @@ pub struct Task<'a> {
 
 impl<'a> Task<'a> {
   pub const STACK_CANARY: u32 = 0xCACAC0C0;
+  pub const XSIGNAL_GOSHUT: u32 = 0xD1A5FE05;
+  pub fn shutallcores() {
+    super::mcal::sio::Peripheral::new().multicore_fifo_push_blocking(Self::XSIGNAL_GOSHUT);
+  }
   pub fn finishjob() {
     // Tell the kernel that we finished this iteration
     unsafe {core::arch::asm!("svc #1");}
@@ -96,6 +100,8 @@ extern "C" {
   fn ctxtswtr();
   #[cfg(armv6m)]
   fn svclanding();
+  #[cfg(armv6m)]
+  fn xsignallanding();
 }
 
 #[derive(Clone, Copy)]
@@ -154,7 +160,7 @@ pub extern "C" fn alarmhandler(sp: usize, fromusermode: bool) -> usize {
             super::mcal::uart::Peripheral::new(super::mcal::uart::Uart::Uart0).puts("Task stack overflow!\n\r");
 
             //TODO: Use a callback to user code to signal this FatalError
-            //TODO: Also, the other cores should be notified and stopped
+            Task::shutallcores();
             loop {}
           }
         }
@@ -173,7 +179,7 @@ pub extern "C" fn alarmhandler(sp: usize, fromusermode: bool) -> usize {
           };
 
           //TODO: Use a callback to user code to signal this FatalError
-          //TODO: Also, the other cores should be notified and stopped
+          Task::shutallcores();
           loop {}
         }
       }
@@ -208,28 +214,62 @@ pub extern "C" fn svchandler(syscall: u32) {
 
   let coreid = super::mcal::sio::Peripheral::new().get_core_num();
   match syscall {
-    1 => {iterationend(coreid)},
-    _ => {panic!("Unknown syscall")},
+    1 => iterationend(coreid),
+    _ => panic!("Unknown syscall"),
+  }
+}
+
+#[no_mangle]
+#[inline(never)]
+pub extern "C" fn xsignalhandler() {
+  fn goshut(coreid: u32) {
+    let mut uart = super::mcal::uart::Peripheral::new(super::mcal::uart::Uart::Uart0);
+    match coreid {
+      0 => uart.puts("C0 gone shut by other core command!\n\r"),
+      1 => uart.puts("C1 gone shut by other core command!\n\r"),
+      _ => unreachable!(),
+    };
+
+    loop {}
+  }
+  
+  let sio = super::mcal::sio::Peripheral::new();
+  let coreid = sio.get_core_num();
+  let recv = sio.multicore_fifo_pop_blocking();
+
+  match recv {
+    Task::XSIGNAL_GOSHUT => goshut(coreid),
+    _ => panic!("Unknown xsignal"),
   }
 }
 
 impl<'a> SchedTable<'a> {
   pub fn start(self) -> ! {
+    let mut sio = super::mcal::sio::Peripheral::new();
+    let mut cm0p = super::mcal::cm0p::Peripheral::new();
+    let coreid = sio.get_core_num();
     // Initialize task ids
     for (idx, task) in self.tasks.iter_mut().enumerate() {
       task.id = Some(idx);
       task.state = TaskState::Ready;
     }
     // Setup the svc call
+    cm0p.irq_set_exclusive_handler(super::mcal::cm0p::IrqId::Svc,
+                                   svclanding);
+    // Setup the xsignal handler
     {
-      let mut cm0p = super::mcal::cm0p::Peripheral::new();
-      let irqid = super::mcal::cm0p::IrqId::Svc;
-      cm0p.irq_set_exclusive_handler(irqid, svclanding);
+      sio.multicore_fifo_clear_irq(); // Remove any remaining shit from the queue
+      let irqid = match coreid {
+        0 => super::mcal::cm0p::IrqId::SioProc0,
+        1 => super::mcal::cm0p::IrqId::SioProc1,
+        _ => unreachable!(),
+      };
+      cm0p.irq_set_exclusive_handler(irqid, xsignallanding);
+      cm0p.irq_set_enabled(irqid, true);
     }
     // Launch the sched table
     unsafe {
       let mut timer = super::mcal::timer::Peripheral::new();
-      let coreid = super::mcal::sio::Peripheral::new().get_core_num();
       let alarm = match coreid {
         0 => super::mcal::timer::AlarmId::Alarm0,
         1 => super::mcal::timer::AlarmId::Alarm1,

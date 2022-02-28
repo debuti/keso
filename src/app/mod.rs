@@ -91,8 +91,12 @@ pub fn taskledoff() -> ! {
 
 #[inline(never)]
 pub fn tasknop() -> ! {
+  static mut MULTIPLIER: u32 = 1;
   loop {
-    mcal::timer::Peripheral::delay_nops(100000);
+    unsafe {
+      mcal::timer::Peripheral::delay_nops(5000000*MULTIPLIER);
+      MULTIPLIER += 1;
+    }
     tasks::Task::finishjob();   
   }
 }

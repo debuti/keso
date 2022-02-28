@@ -175,11 +175,10 @@ impl Peripheral {
     * \return 32 bit unsigned data from the FIFO.
     */
     #[inline(never)]
-    fn multicore_fifo_pop_blocking(&self) -> u32 {
+    pub fn multicore_fifo_pop_blocking(&self) -> u32 {
         // If nothing there yet, we wait for an event first,
         // to try and avoid too much busy waiting
-        while !self.multicore_fifo_rvalid()
-         {super::intrinsics::wfe();}
+        while !self.multicore_fifo_rvalid() {super::intrinsics::wfe();}
 
         self.fifo_rd.read()
     }
@@ -193,7 +192,7 @@ impl Peripheral {
     * \param data A 32 bit value to push on to the FIFO
     */
     #[inline(never)]
-    fn multicore_fifo_push_blocking(&mut self, data: u32) {
+    pub fn multicore_fifo_push_blocking(&mut self, data: u32) {
         // We wait for the fifo to have some space
         while !self.multicore_fifo_wready() {/*NOP*/}
 
@@ -211,6 +210,15 @@ impl Peripheral {
         while self.multicore_fifo_rvalid() {
             self.fifo_rd.read();
         }
+    }
+
+    /* \brief 
+    *
+    */
+    #[inline(never)]
+    pub fn multicore_fifo_clear_irq(&mut self) {
+        // Write any value to clear the error flags
+        self.fifo_st.write(0xff);
     }
 
     #[inline(never)]

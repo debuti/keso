@@ -35,6 +35,19 @@ svclanding:
 .cfi_endproc
 .size svclanding, . - svclanding
 
+.global xsignallanding
+.type xsignallanding,%function
+.thumb_func
+.cfi_startproc
+xsignallanding:
+	cpsid	i
+  push {lr}
+  bl xsignalhandler
+	cpsie	i
+  pop {pc}
+.cfi_endproc
+.size xsignallanding, . - xsignallanding
+
 .global ctxtswtr
 .type ctxtswtr,%function
 .thumb_func

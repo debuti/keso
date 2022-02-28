@@ -149,7 +149,6 @@ impl Peripheral {
 
     #[inline(never)]
     pub fn irq_set_enabled(&mut self, irq: IrqId, enabled: bool) {
-//        crate::app::mcal::timer::Peripheral::delay_nops(u32::MAX);
         Self::check_irq_param(irq);
         self.irq_set_mask_enabled(1 << (irq as u32 - 16), enabled);
     }
