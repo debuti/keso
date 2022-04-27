@@ -2,7 +2,7 @@
 Extreme real-time operating system for RP2040 written in Rust. Extreme as in if the time constrains are violated the system halts.
 
 # Environment setup
-This chapter targets Ubuntu 20.04
+This chapter targets Ubuntu 20.04 LTS
 
 ## Build
 
@@ -35,7 +35,7 @@ cargo install cargo-binutils
 
 #### Minimum Supported Rust Version (MSRV)
 
-This crate is guaranteed to compile on stable Rust 1.42 and up. It might compile with older versions but that may change in any new patch release.
+This crate is guaranteed to compile on stable Rust 1.59 and up. It wont compile in earlier versions since asm! macro was unstable.
 
 
 ## Dev
@@ -65,4 +65,4 @@ code --install-extension ms-vscode.cpptools
 ```
 
 # License
-This software project follows the license (CC BY-NC-SA 4.0)[https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode]
+This software project follows the license [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode)
