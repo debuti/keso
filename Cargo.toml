@@ -1,0 +1,30 @@
+[package]
+authors = ["Borja García <debuti@gmail.com>"]
+edition = "2018"
+readme = "README.md"
+name = "keso"
+version = "0.1.0"
+
+[dependencies]
+volatile = "0.2.6"
+rp2040-boot2 = { git = "https://github.com/debuti/rp2040-boot2-rs", branch="main", features = ["ram_memcpy"]}
+
+[build-dependencies]
+chrono = "0.4"
+
+[profile.release]
+codegen-units   = 1
+debug           = true
+incremental     = false
+lto             = true
+opt-level       = 's'
+panic           = "abort"
+
+[profile.dev]
+opt-level       = 's'
+
+# this lets you use `cargo fix`!
+[[bin]]
+name = "keso"
+test = false
+bench = false

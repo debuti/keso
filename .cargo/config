@@ -1,0 +1,9 @@
+[build]
+target = "thumbv6m-none-eabi"
+
+[target.thumbv6m-none-eabi]
+runner = "arm-none-eabi-gdb -tui -q -x debug.gdb"
+rustflags = [
+    "-C", "link-arg=-Tmemory.ld",
+    "-C", "link-arg=-Map=target/thumbv6m-none-eabi/debug/app.map",
+]
